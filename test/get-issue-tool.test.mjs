@@ -14,6 +14,7 @@ const envKeys = [
   "SONARQUBE_PROJECT_KEY",
   "SONARQUBE_BRANCH",
   "SONARQUBE_PULL_REQUEST",
+  "SONARQUBE_ALLOW_INSECURE_HTTP",
 ];
 
 class GetIssueRouteFetch {
@@ -26,12 +27,19 @@ class GetIssueRouteFetch {
 
   async fetch(url, init) {
     this.calls.push({ url, init });
-    return this.handler(url);
+    return this.handler(url, init);
   }
 }
 
 function jsonResponse(payload, status = 200) {
   return new Response(JSON.stringify(payload), { status });
+}
+
+function abortError(message = "The operation was aborted.") {
+  const error = new Error(message);
+  error.name = "AbortError";
+
+  return error;
 }
 
 function snapshotEnv() {
@@ -96,6 +104,7 @@ test("registers analyseme_get_issue with schema and prompt guidance", () => {
   assert.equal(tools.length, 1);
   assert.equal(tools[0].name, ANALYSEME_TOOL_NAMES.getIssue);
   assert.ok(tools[0].parameters.properties.issueKey);
+  assert.equal(tools[0].parameters.properties.issueKey.minLength, 1);
   assert.ok(tools[0].parameters.properties.projectKey);
   assert.ok(tools[0].promptSnippet);
   assert.ok(tools[0].promptGuidelines.every((guideline) => guideline.includes(ANALYSEME_TOOL_NAMES.getIssue)));
@@ -143,7 +152,7 @@ test("executes analyseme_get_issue with issue, source, flow, and Sonar rule guid
 
     const result = await executeGetIssueTool(
       "call-get-issue",
-      { issueKey: "ISSUE-1", projectKey: "demo", organization: "arg-org", branch: "main" },
+      { issueKey: " ISSUE-1 ", projectKey: " demo ", organization: " arg-org ", branch: " main " },
       undefined,
       undefined,
       { cwd },
@@ -162,6 +171,9 @@ test("executes analyseme_get_issue with issue, source, flow, and Sonar rule guid
     assert.equal(result.details.issue.sourceSnippets.length, 2);
     assert.equal(result.details.issue.secondaryLocations.length, 1);
     assert.equal(result.details.issue.flows.length, 1);
+    assert.equal(result.details.issueKey, "ISSUE-1");
+    assert.equal(result.details.projectKey, "demo");
+    assert.equal(result.details.organization, "arg-org");
     assert.equal(result.details.scope, "branch main");
     assert.match(result.details.links.issue ?? "", /issues=ISSUE-1/);
     assert.match(result.details.links.rule ?? "", /rule_key=typescript%3AS123/);
@@ -170,6 +182,25 @@ test("executes analyseme_get_issue with issue, source, flow, and Sonar rule guid
     assert.doesNotMatch(serializedDetails, /issue-secret-token/);
   } finally {
     restoreEnv(envSnapshot);
+    globalThis.fetch = fetchSnapshot;
+    await removeTempDir(cwd);
+  }
+});
+
+test("analyseme_get_issue rejects empty issue keys before Sonar requests", async () => {
+  const cwd = await createTempDir();
+  const fetchSnapshot = globalThis.fetch;
+  const routeFetch = new GetIssueRouteFetch(() => jsonResponse({ errors: [{ msg: "fetch should not run" }] }, 500));
+
+  try {
+    globalThis.fetch = routeFetch.fetch.bind(routeFetch);
+
+    await assert.rejects(
+      executeGetIssueTool("call-get-issue-empty", { issueKey: "   " }, undefined, undefined, { cwd }),
+      /issueKey is required and must be a non-empty string/,
+    );
+    assert.equal(routeFetch.calls.length, 0);
+  } finally {
     globalThis.fetch = fetchSnapshot;
     await removeTempDir(cwd);
   }
@@ -191,6 +222,30 @@ test("analyseme_get_issue throws when the issue is not found", async () => {
     await assert.rejects(
       executeGetIssueTool("call-get-issue", { issueKey: "MISSING" }, undefined, undefined, { cwd }),
       /Sonar issue MISSING was not found/,
+    );
+  } finally {
+    restoreEnv(envSnapshot);
+    globalThis.fetch = fetchSnapshot;
+    await removeTempDir(cwd);
+  }
+});
+
+test("analyseme_get_issue rejects detail responses for a different issue key", async () => {
+  const cwd = await createTempDir();
+  const envSnapshot = snapshotEnv();
+  const fetchSnapshot = globalThis.fetch;
+  const routeFetch = new GetIssueRouteFetch((url) => {
+    if (url.includes("/api/issues/search")) return jsonResponse({ issues: [detailedIssue({ key: "OTHER-ISSUE" })] });
+    return jsonResponse({ errors: [{ msg: "unexpected path" }] }, 404);
+  });
+
+  try {
+    applyEnv({ SONARQUBE_URL: "https://sonar.example.com", SONARQUBE_TOKEN: "issue-secret-token" });
+    globalThis.fetch = routeFetch.fetch.bind(routeFetch);
+
+    await assert.rejects(
+      executeGetIssueTool("call-get-issue", { issueKey: "ISSUE-1" }, undefined, undefined, { cwd }),
+      /Sonar issue ISSUE-1 was not found in the issue detail response/,
     );
   } finally {
     restoreEnv(envSnapshot);
@@ -230,7 +285,72 @@ test("analyseme_get_issue reports missing source context and missing rule guidan
   }
 });
 
-test("analyseme_get_issue includes visible truncation metadata for long rule guidance", async () => {
+test("analyseme_get_issue preserves abort from optional rule metadata", async () => {
+  const cwd = await createTempDir();
+  const envSnapshot = snapshotEnv();
+  const fetchSnapshot = globalThis.fetch;
+  const controller = new AbortController();
+  const routeFetch = new GetIssueRouteFetch((url) => {
+    if (url.includes("/api/issues/search")) return jsonResponse({ issues: [detailedIssue()] });
+    if (url.includes("/api/rules/show")) {
+      controller.abort();
+      throw abortError();
+    }
+    if (url.includes("/api/sources/")) return jsonResponse({ errors: [{ msg: "source should not run" }] }, 500);
+    return jsonResponse({ errors: [{ msg: "unexpected path" }] }, 404);
+  });
+
+  try {
+    applyEnv({ SONARQUBE_URL: "https://sonar.example.com", SONARQUBE_TOKEN: "issue-secret-token" });
+    globalThis.fetch = routeFetch.fetch.bind(routeFetch);
+
+    await assert.rejects(
+      executeGetIssueTool("call-get-issue-abort-rule", { issueKey: "ISSUE-1" }, controller.signal, undefined, { cwd }),
+      (error) => error instanceof Error && error.name === "AbortError",
+    );
+    assert.ok(routeFetch.calls.some((call) => call.url.includes("/api/rules/show")));
+    assert.equal(routeFetch.calls.some((call) => call.url.includes("/api/sources/")), false);
+  } finally {
+    restoreEnv(envSnapshot);
+    globalThis.fetch = fetchSnapshot;
+    await removeTempDir(cwd);
+  }
+});
+
+test("analyseme_get_issue preserves abort from optional source snippets and skips fallback", async () => {
+  const cwd = await createTempDir();
+  const envSnapshot = snapshotEnv();
+  const fetchSnapshot = globalThis.fetch;
+  const controller = new AbortController();
+  const routeFetch = new GetIssueRouteFetch((url) => {
+    if (url.includes("/api/issues/search")) return jsonResponse({ issues: [detailedIssue()] });
+    if (url.includes("/api/rules/show")) return jsonResponse({ rule: { key: "typescript:S123", name: "Rule name" } });
+    if (url.includes("/api/sources/issue_snippets")) {
+      controller.abort();
+      throw abortError();
+    }
+    if (url.includes("/api/sources/show")) return jsonResponse({ errors: [{ msg: "fallback should not run" }] }, 500);
+    return jsonResponse({ errors: [{ msg: "unexpected path" }] }, 404);
+  });
+
+  try {
+    applyEnv({ SONARQUBE_URL: "https://sonar.example.com", SONARQUBE_TOKEN: "issue-secret-token" });
+    globalThis.fetch = routeFetch.fetch.bind(routeFetch);
+
+    await assert.rejects(
+      executeGetIssueTool("call-get-issue-abort-source", { issueKey: "ISSUE-1" }, controller.signal, undefined, { cwd }),
+      (error) => error instanceof Error && error.name === "AbortError",
+    );
+    assert.ok(routeFetch.calls.some((call) => call.url.includes("/api/sources/issue_snippets")));
+    assert.equal(routeFetch.calls.some((call) => call.url.includes("/api/sources/show")), false);
+  } finally {
+    restoreEnv(envSnapshot);
+    globalThis.fetch = fetchSnapshot;
+    await removeTempDir(cwd);
+  }
+});
+
+test("analyseme_get_issue includes visible field truncation metadata for long rule guidance", async () => {
   const cwd = await createTempDir();
   const envSnapshot = snapshotEnv();
   const fetchSnapshot = globalThis.fetch;
@@ -255,9 +375,10 @@ test("analyseme_get_issue includes visible truncation metadata for long rule gui
       { cwd },
     );
 
-    assert.equal(result.details.truncated, true);
-    assert.equal(result.details.truncation.truncated, true);
-    assert.match(result.content[0].text, /AnalyseMe output truncated/);
+    assert.ok(result.details.textSafety.truncatedFields > 0);
+    assert.match(result.content[0].text, /AnalyseMe field truncated/);
+    assert.match(result.details.issue.guidance ?? "", /AnalyseMe field truncated/);
+    assert.ok((result.details.issue.guidance ?? "").length <= 8_000);
   } finally {
     restoreEnv(envSnapshot);
     globalThis.fetch = fetchSnapshot;

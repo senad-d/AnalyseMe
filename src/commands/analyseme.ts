@@ -1,6 +1,11 @@
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 
-import { ANALYSEME_COMMAND, ANALYSEME_TOOL_NAMES, SONAR_ENV_VARS } from "../constants.ts";
+import {
+  ANALYSEME_COMMAND,
+  ANALYSEME_TOOL_NAMES,
+  SONAR_ALLOW_INSECURE_HTTP_ENV_VAR,
+  SONAR_ENV_VARS,
+} from "../constants.ts";
 import { loadAnalyseMeConfig } from "../config/load-config.ts";
 import { resolveProjectKey } from "../config/project-key.ts";
 import { ConfigTuiComponent, buildConfigTuiModel, renderConfigTui } from "../ui/config-tui.ts";
@@ -122,7 +127,7 @@ export function buildAnalyseMeHelpText(args: string = "help"): string {
     "",
     "## Required configuration",
     "",
-    `- ${SONAR_ENV_VARS.url}: SonarQube/SonarCloud base URL, for example \`https://sonarcloud.io\`.`,
+    `- ${SONAR_ENV_VARS.url}: SonarQube/SonarCloud base URL, for example \`https://sonarcloud.io\`. HTTPS is required by default.`,
     `- ${SONAR_ENV_VARS.token}: Sonar API token. AnalyseMe masks this value and never prints it.`,
     "",
     "## Optional configuration",
@@ -131,6 +136,7 @@ export function buildAnalyseMeHelpText(args: string = "help"): string {
     `- ${SONAR_ENV_VARS.projectKey}: default project key when no tool projectKey is passed.`,
     `- ${SONAR_ENV_VARS.branch}: branch analysis scope. Mutually exclusive with ${SONAR_ENV_VARS.pullRequest}.`,
     `- ${SONAR_ENV_VARS.pullRequest}: pull request analysis scope. Mutually exclusive with ${SONAR_ENV_VARS.branch}.`,
+    `- ${SONAR_ALLOW_INSECURE_HTTP_ENV_VAR}=true: explicit local/trusted-development opt-in for non-TLS \`http://\` Sonar URLs. Tokens can be exposed on the network; prefer HTTPS.`,
     "",
     "Project key resolution order: explicit tool argument, `SONARQUBE_PROJECT_KEY`, then `sonar-project.properties` `sonar.projectKey`. `.git/config` remote names are diagnostics only.",
     "",

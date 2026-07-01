@@ -4,10 +4,15 @@ import { Type } from "typebox";
 import { ANALYSEME_TOOL_NAMES } from "../constants.ts";
 import { buildHotspotSearchEndpoint } from "../sonar/endpoints.ts";
 import { createSonarClient } from "../sonar/client.ts";
-import type { AgentSecurityHotspotSummary } from "../sonar/hotspot-mapping.ts";
-import { filterSecurityHotspotsRequiringReview, mapHotspotSearchResponse } from "../sonar/hotspot-mapping.ts";
+import type { AgentSecurityHotspotSummary, SonarMappingInvalidRow } from "../sonar/hotspot-mapping.ts";
+import {
+  filterSecurityHotspotsRequiringReview,
+  mapHotspotSearchResponseWithDiagnostics,
+} from "../sonar/hotspot-mapping.ts";
+import { summarizeSonarTextSafety } from "../utils/text-safety.ts";
+import type { SonarTextSafetySummary } from "../utils/text-safety.ts";
 import { truncateAnalyseMeText } from "../utils/truncation.ts";
-import { normalizePositiveInteger, renderAnalysisScope, resolveProjectToolContext } from "./shared.ts";
+import { asRecord, normalizePositiveInteger, numberField, renderAnalysisScope, renderLocation, resolveProjectToolContext } from "./shared.ts";
 
 export interface ListSecurityHotspotsToolInput {
   projectKey?: string;
@@ -24,7 +29,15 @@ export interface ListSecurityHotspotsPagination {
   total?: number;
   requiringReviewReturned: number;
   excludedNonReview: number;
+  malformedRowsSkipped: number;
   shown: number;
+}
+
+export interface ListSecurityHotspotsPartialData {
+  warnings: string[];
+  invalidRows: SonarMappingInvalidRow[];
+  malformedRowsSkipped: number;
+  missingHotspotsArray: boolean;
 }
 
 export interface ListSecurityHotspotsDetails {
@@ -35,8 +48,11 @@ export interface ListSecurityHotspotsDetails {
   hotspots: AgentSecurityHotspotSummary[];
   pagination: ListSecurityHotspotsPagination;
   request: ReturnType<typeof buildHotspotSearchEndpoint>;
+  warnings: string[];
+  partialData: ListSecurityHotspotsPartialData;
   truncation: ReturnType<typeof truncateAnalyseMeText>["metadata"];
   truncated: boolean;
+  textSafety: SonarTextSafetySummary;
 }
 
 const DEFAULT_HOTSPOT_LIMIT = 50;
@@ -109,10 +125,25 @@ export async function executeListSecurityHotspotsTool(
   const request = buildHotspotSearchEndpoint({ ...resolvedContext.endpointOptions, page, pageSize });
   const client = createSonarClient(resolvedContext.config);
   const response = await client.getJson<unknown>({ ...request, signal });
-  const mappedHotspots = mapHotspotSearchResponse(response);
+  const mappingResult = mapHotspotSearchResponseWithDiagnostics(response);
+  const mappedHotspots = mappingResult.hotspots;
   const hotspots = filterSecurityHotspotsRequiringReview(mappedHotspots);
+  const warnings = mappingResult.warnings;
   const scopeLabel = renderAnalysisScope(resolvedContext.scope);
-  const pagination = readHotspotPagination(response, page, pageSize, mappedHotspots.length, hotspots.length);
+  const pagination = readHotspotPagination(
+    response,
+    page,
+    pageSize,
+    mappingResult.rawRowCount,
+    mappingResult.invalidRows.length,
+    hotspots.length,
+  );
+  const partialData = buildListHotspotsPartialData(
+    mappingResult.missingHotspotsArray,
+    mappingResult.invalidRows,
+    warnings,
+  );
+  const textSafety = summarizeSonarTextSafety({ hotspots, warnings });
   const rendered = renderSecurityHotspots({
     projectKey: resolvedContext.projectKey,
     projectKeySource: resolvedContext.projectKeySource,
@@ -120,6 +151,7 @@ export async function executeListSecurityHotspotsTool(
     scope: scopeLabel,
     hotspots,
     pagination,
+    warnings,
   });
   const truncated = truncateAnalyseMeText(rendered);
 
@@ -133,9 +165,25 @@ export async function executeListSecurityHotspotsTool(
       hotspots,
       pagination,
       request,
+      warnings,
+      partialData,
       truncation: truncated.metadata,
       truncated: truncated.metadata.truncated,
+      textSafety,
     },
+  };
+}
+
+function buildListHotspotsPartialData(
+  missingHotspotsArray: boolean,
+  invalidRows: SonarMappingInvalidRow[],
+  warnings: string[],
+): ListSecurityHotspotsPartialData {
+  return {
+    warnings,
+    invalidRows,
+    malformedRowsSkipped: invalidRows.length,
+    missingHotspotsArray,
   };
 }
 
@@ -144,6 +192,7 @@ function readHotspotPagination(
   page: number,
   pageSize: number,
   rawReturned: number,
+  malformedRowsSkipped: number,
   requiringReviewReturned: number,
 ): ListSecurityHotspotsPagination {
   const payload = asRecord(response);
@@ -154,7 +203,8 @@ function readHotspotPagination(
     pageSize: numberField(paging, "pageSize") ?? numberField(payload, "ps") ?? pageSize,
     total: numberField(paging, "total") ?? numberField(payload, "total"),
     requiringReviewReturned,
-    excludedNonReview: Math.max(0, rawReturned - requiringReviewReturned),
+    excludedNonReview: Math.max(0, rawReturned - malformedRowsSkipped - requiringReviewReturned),
+    malformedRowsSkipped,
     shown: requiringReviewReturned,
   };
 }
@@ -166,6 +216,7 @@ function renderSecurityHotspots(input: {
   scope: string;
   hotspots: AgentSecurityHotspotSummary[];
   pagination: ListSecurityHotspotsPagination;
+  warnings: string[];
 }): string {
   const lines = [
     `# AnalyseMe security hotspots requiring review: ${input.projectKey}`,
@@ -178,15 +229,27 @@ function renderSecurityHotspots(input: {
     `- Server total: ${input.pagination.total ?? "unavailable"}`,
     `- Hotspots shown: ${input.pagination.shown}`,
     `- Excluded from this page: ${input.pagination.excludedNonReview}`,
-    "",
-    "## Security hotspots",
   ];
+
+  if (input.pagination.malformedRowsSkipped > 0) {
+    lines.push(`- Malformed rows skipped: ${input.pagination.malformedRowsSkipped}`);
+  }
+
+  lines.push("", "## Security hotspots");
 
   if (input.hotspots.length === 0) lines.push("- No security hotspots requiring review returned for this page.");
 
   input.hotspots.forEach((hotspot, index) => {
     lines.push(...renderHotspotRow(hotspot, index + 1));
   });
+
+  if (input.warnings.length > 0) {
+    lines.push("", "## Warnings");
+
+    for (const warning of input.warnings) {
+      lines.push(`- ${warning}`);
+    }
+  }
 
   return lines.join("\n");
 }
@@ -212,32 +275,5 @@ function renderStatusAndResolution(hotspot: AgentSecurityHotspotSummary): string
 }
 
 function renderHotspotLocation(hotspot: AgentSecurityHotspotSummary): string {
-  const component = hotspot.location.component ?? "unavailable component";
-  const file = hotspot.location.file ? ` (${hotspot.location.file})` : "";
-  const line = hotspot.location.line ? `:${hotspot.location.line}` : "";
-  const range = renderTextRange(hotspot.location.textRange);
-
-  return `${component}${file}${line}${range}`;
-}
-
-function renderTextRange(textRange: AgentSecurityHotspotSummary["location"]["textRange"]): string {
-  if (!textRange) return "";
-
-  const startLine = textRange.startLine ?? "?";
-  const endLine = textRange.endLine ?? startLine;
-  const startOffset = textRange.startOffset ?? "?";
-  const endOffset = textRange.endOffset ?? "?";
-
-  return ` (range ${startLine}:${startOffset}-${endLine}:${endOffset})`;
-}
-
-function asRecord(value: unknown): Record<string, unknown> {
-  if (typeof value === "object" && value !== null) return value as Record<string, unknown>;
-
-  return {};
-}
-
-function numberField(record: Record<string, unknown>, key: string): number | undefined {
-  const value = record[key];
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+  return renderLocation(hotspot.location);
 }

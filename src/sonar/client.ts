@@ -1,6 +1,7 @@
 import { normalizeSonarUrl } from "../config/load-config.ts";
 import type { SonarConnectionConfig } from "../config/types.ts";
-import { redactSecrets } from "../utils/mask.ts";
+import { rethrowIfAbortError } from "../utils/abort.ts";
+import { safeSonarText, safeSonarWarningText } from "../utils/text-safety.ts";
 
 export type SonarQueryValue = string | number | boolean | undefined;
 export type SonarFetch = typeof fetch;
@@ -38,12 +39,12 @@ export class HttpSonarClient implements SonarClient {
   readonly fetchImpl: SonarFetch;
 
   constructor(config: SonarConnectionConfig, options: SonarClientOptions = {}) {
-    this.config = { ...config, url: normalizeSonarUrl(config.url) };
+    this.config = { ...config, url: normalizeSonarUrl(config.url, { allowInsecureHttp: config.allowInsecureHttp }) };
     this.fetchImpl = options.fetch ?? fetch;
   }
 
   async getJson<T>(request: SonarClientRequest): Promise<T> {
-    const url = buildSonarApiUrl(this.config.url, request);
+    const url = buildSonarApiUrl(this.config.url, request, { allowInsecureHttp: this.config.allowInsecureHttp });
     const response = await fetchSonarResponse(this.fetchImpl, url, this.config.token, request.signal);
 
     if (!response.ok) {
@@ -59,11 +60,20 @@ export function createSonarClient(config: SonarConnectionConfig, options: SonarC
   return new HttpSonarClient(config, options);
 }
 
-export function buildSonarApiUrl(baseUrl: string, request: SonarClientRequest): string {
-  const normalizedBaseUrl = normalizeSonarUrl(baseUrl);
+export function buildSonarApiUrl(
+  baseUrl: string,
+  request: SonarClientRequest,
+  options: { allowInsecureHttp?: boolean } = {},
+): string {
+  const normalizedBaseUrl = normalizeSonarUrl(baseUrl, options);
   const normalizedPath = normalizeRequestPath(request.path);
-  const url = new URL(normalizedPath, `${normalizedBaseUrl}/`);
+  const base = new URL(`${normalizedBaseUrl}/`);
+  const url = new URL(normalizedPath, base);
   const query = withRequestOrganization(request.query ?? {}, request.organization);
+
+  if (url.origin !== base.origin) {
+    throw new SonarApiError("Sonar API request path must stay relative to the configured Sonar URL.");
+  }
 
   for (const [key, value] of Object.entries(query)) {
     if (value === undefined) continue;
@@ -84,11 +94,17 @@ function normalizeRequestPath(path: string): string {
     throw new SonarApiError("Sonar API request path is empty.");
   }
 
-  if (/^https?:\/\//i.test(trimmed)) {
+  if (isExternallyRootedRequestPath(trimmed)) {
     throw new SonarApiError("Sonar API request path must be relative to the configured Sonar URL.");
   }
 
   return trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
+}
+
+function isExternallyRootedRequestPath(path: string): boolean {
+  const normalizedPrefix = path.slice(0, 2).replaceAll("\\", "/");
+
+  return normalizedPrefix === "//" || /^[A-Za-z][A-Za-z\d+.-]*:/.test(path);
 }
 
 function withRequestOrganization(
@@ -116,7 +132,8 @@ async function fetchSonarResponse(
       signal,
     });
   } catch (error) {
-    throw new SonarApiError(redactSecrets(`Sonar request failed: ${errorMessage(error)}`, [token]));
+    rethrowIfAbortError(error, signal);
+    throw new SonarApiError(safeSonarWarningText(`Sonar request failed: ${errorMessage(error)}`, [token]));
   }
 }
 
@@ -126,7 +143,7 @@ async function buildHttpErrorMessage(response: Response, path: string, token: st
   const statusText = response.statusText ? ` ${response.statusText}` : "";
   const message = sonarMessage ? `: ${sonarMessage}` : "";
 
-  return redactSecrets(`Sonar API request failed for ${path}: HTTP ${response.status}${statusText}${message}`, [token]);
+  return safeSonarWarningText(`Sonar API request failed for ${path}: HTTP ${response.status}${statusText}${message}`, [token]);
 }
 
 async function readJsonResponse<T>(response: Response, token: string, path: string): Promise<T> {
@@ -138,7 +155,7 @@ async function readJsonResponse<T>(response: Response, token: string, path: stri
     return JSON.parse(body) as T;
   } catch (error) {
     const message = `Sonar API returned invalid JSON for ${path}: ${errorMessage(error)}`;
-    throw new SonarApiError(redactSecrets(message, [token]), response.status, path);
+    throw new SonarApiError(safeSonarWarningText(message, [token]), response.status, path);
   }
 }
 
@@ -167,7 +184,7 @@ function extractSonarErrorMessageFromJson(payload: unknown): string | undefined 
   if (Array.isArray(errors)) return joinSonarErrorMessages(errors);
 
   const message = payload.message;
-  return typeof message === "string" ? message : undefined;
+  return typeof message === "string" ? safeSonarText(message).text : undefined;
 }
 
 function joinSonarErrorMessages(errors: unknown[]): string | undefined {
@@ -179,11 +196,11 @@ function joinSonarErrorMessages(errors: unknown[]): string | undefined {
     if (typeof error.message === "string") messages.push(error.message);
   }
 
-  return messages.length > 0 ? messages.join("; ") : undefined;
+  return messages.length > 0 ? safeSonarText(messages.join("; ")).text : undefined;
 }
 
 function truncateErrorBody(body: string): string {
-  const singleLineBody = body.replaceAll(/\s+/g, " ").trim();
+  const singleLineBody = safeSonarText(body.replaceAll(/\s+/g, " ").trim(), 300).text;
   if (singleLineBody.length <= 300) return singleLineBody;
 
   return `${singleLineBody.slice(0, 297)}...`;

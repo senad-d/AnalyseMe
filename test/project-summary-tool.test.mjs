@@ -14,6 +14,7 @@ const envKeys = [
   "SONARQUBE_PROJECT_KEY",
   "SONARQUBE_BRANCH",
   "SONARQUBE_PULL_REQUEST",
+  "SONARQUBE_ALLOW_INSECURE_HTTP",
 ];
 
 class RouteFetch {
@@ -110,7 +111,7 @@ test("executes analyseme_get_project_summary with mocked Sonar responses", async
 
     const result = await executeProjectSummaryTool(
       "call-1",
-      { projectKey: "demo", organization: "arg-org", branch: "main" },
+      { projectKey: " demo ", organization: " arg-org ", branch: " main " },
       undefined,
       undefined,
       { cwd },

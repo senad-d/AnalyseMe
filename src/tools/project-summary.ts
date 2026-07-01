@@ -6,6 +6,8 @@ import { buildComponentMeasuresEndpoint, buildProjectStatusEndpoint } from "../s
 import { createSonarClient } from "../sonar/client.ts";
 import type { AgentProjectSummary } from "../sonar/project-mapping.ts";
 import { mapProjectSummaryResponse } from "../sonar/project-mapping.ts";
+import { summarizeSonarTextSafety } from "../utils/text-safety.ts";
+import type { SonarTextSafetySummary } from "../utils/text-safety.ts";
 import { truncateAnalyseMeText } from "../utils/truncation.ts";
 import { renderAnalysisScope, resolveProjectToolContext } from "./shared.ts";
 
@@ -27,6 +29,7 @@ export interface ProjectSummaryDetails {
     measures: ReturnType<typeof buildComponentMeasuresEndpoint>;
   };
   truncation: ReturnType<typeof truncateAnalyseMeText>["metadata"];
+  textSafety: SonarTextSafetySummary;
 }
 
 const projectSummaryParameters = Type.Object({
@@ -84,6 +87,7 @@ export async function executeProjectSummaryTool(
   const measuresResponse = await client.getJson<unknown>({ ...measuresRequest, signal });
   const summary = mapProjectSummaryResponse(resolvedContext.projectKey, projectStatusResponse, measuresResponse);
   const scopeLabel = renderAnalysisScope(resolvedContext.scope);
+  const textSafety = summarizeSonarTextSafety(summary);
   const rendered = renderProjectSummary(
     summary,
     resolvedContext.projectKeySource,
@@ -105,6 +109,7 @@ export async function executeProjectSummaryTool(
         measures: measuresRequest,
       },
       truncation: truncated.metadata,
+      textSafety,
     },
   };
 }

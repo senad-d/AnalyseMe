@@ -62,7 +62,7 @@ test("extension entry point delegates only to implemented registrations", () => 
   assert.doesNotMatch(extensionSource, /\.registerTool\(|\.registerCommand\(|\.on\(/);
 });
 
-test("runtime skeleton files exist for planned implementation areas", async () => {
+test("runtime implementation files exist for AnalyseMe surfaces", async () => {
   for (const path of skeletonFiles) {
     await access(new URL(path, import.meta.url));
   }

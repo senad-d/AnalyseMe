@@ -1,3 +1,9 @@
+import {
+  SONAR_IDENTIFIER_TEXT_MAX_CHARS,
+  SONAR_LONG_TEXT_MAX_CHARS,
+  SONAR_MEDIUM_TEXT_MAX_CHARS,
+  safeSonarString,
+} from "../utils/text-safety.ts";
 import type { AgentSourceSnippet, SonarIssueLocation } from "./issue-mapping.ts";
 import { mapSourceSnippets } from "./issue-mapping.ts";
 
@@ -33,6 +39,22 @@ export interface AgentSecurityHotspotDetail extends AgentSecurityHotspotSummary 
   flows: SonarIssueLocation[][];
 }
 
+export interface SonarMappingInvalidRow {
+  index: number;
+  reason: string;
+}
+
+export interface HotspotSummaryMappingResult {
+  hotspots: AgentSecurityHotspotSummary[];
+  invalidRows: SonarMappingInvalidRow[];
+  warnings: string[];
+  rawRowCount: number;
+}
+
+export interface HotspotSearchMappingResult extends HotspotSummaryMappingResult {
+  missingHotspotsArray: boolean;
+}
+
 const NON_REVIEW_HOTSPOT_STATUSES = new Set(["REVIEWED", "SAFE", "FIXED", "ACKNOWLEDGED"]);
 const NON_REVIEW_HOTSPOT_RESOLUTIONS = new Set(["SAFE", "FIXED", "ACKNOWLEDGED"]);
 
@@ -54,26 +76,67 @@ export function filterSecurityHotspotsRequiringReview<THotspot extends SonarSecu
 }
 
 export function mapHotspotSearchResponse(response: unknown): AgentSecurityHotspotSummary[] {
+  return mapHotspotSearchResponseWithDiagnostics(response).hotspots;
+}
+
+export function mapHotspotSearchResponseWithDiagnostics(response: unknown): HotspotSearchMappingResult {
   const payload = asRecord(response);
-  const hotspots = arrayField(payload, "hotspots");
-  return hotspots.map(mapSecurityHotspotSummary);
+  const hotspots = payload.hotspots;
+
+  if (!Array.isArray(hotspots)) {
+    return {
+      hotspots: [],
+      invalidRows: [],
+      warnings: ["Sonar hotspot search response did not include a hotspots array; no hotspot rows were mapped."],
+      rawRowCount: 0,
+      missingHotspotsArray: true,
+    };
+  }
+
+  return {
+    ...mapSecurityHotspotSummariesWithDiagnostics(hotspots),
+    missingHotspotsArray: false,
+  };
+}
+
+export function mapSecurityHotspotSummariesWithDiagnostics(hotspots: unknown[]): HotspotSummaryMappingResult {
+  const mappedHotspots: AgentSecurityHotspotSummary[] = [];
+  const invalidRows: SonarMappingInvalidRow[] = [];
+
+  hotspots.forEach((hotspot, index) => {
+    const validationError = validateSecurityHotspotSummaryPayload(hotspot);
+
+    if (validationError) {
+      invalidRows.push({ index, reason: validationError });
+      return;
+    }
+
+    mappedHotspots.push(mapSecurityHotspotSummary(hotspot));
+  });
+
+  return {
+    hotspots: mappedHotspots,
+    invalidRows,
+    warnings: buildHotspotMappingWarnings(invalidRows),
+    rawRowCount: hotspots.length,
+  };
 }
 
 export function mapSecurityHotspotSummary(hotspot: unknown): AgentSecurityHotspotSummary {
   const payload = asRecord(hotspot);
 
   return {
-    key: stringField(payload, "key") ?? "unknown-hotspot",
-    message: stringField(payload, "message"),
-    status: stringField(payload, "status"),
-    resolution: stringField(payload, "resolution"),
-    vulnerabilityProbability: stringField(payload, "vulnerabilityProbability"),
-    securityCategory: stringField(payload, "securityCategory"),
-    assignee: stringField(payload, "assignee"),
-    author: stringField(payload, "author"),
+    key: requiredHotspotKey(payload),
+    message: mediumStringField(payload, "message"),
+    status: identifierField(payload, "status"),
+    resolution: identifierField(payload, "resolution"),
+    vulnerabilityProbability: identifierField(payload, "vulnerabilityProbability"),
+    securityCategory: identifierField(payload, "securityCategory"),
+    assignee: identifierField(payload, "assignee"),
+    author: identifierField(payload, "author"),
     location: mapHotspotLocation(payload),
-    createdAt: stringField(payload, "creationDate") ?? stringField(payload, "createdAt"),
-    updatedAt: stringField(payload, "updateDate") ?? stringField(payload, "updatedAt"),
+    createdAt: identifierField(payload, "creationDate") ?? identifierField(payload, "createdAt"),
+    updatedAt: identifierField(payload, "updateDate") ?? identifierField(payload, "updatedAt"),
   };
 }
 
@@ -94,15 +157,37 @@ export function extractHotspotGuidance(hotspot: unknown): AgentSecurityHotspotGu
   const rule = asRecord(payload.rule);
 
   return {
-    riskDescription: stringField(payload, "riskDescription") ?? stringField(rule, "riskDescription"),
+    riskDescription: longStringField(payload, "riskDescription") ?? longStringField(rule, "riskDescription"),
     vulnerabilityDescription:
-      stringField(payload, "vulnerabilityDescription") ?? stringField(rule, "vulnerabilityDescription"),
-    fixRecommendation: stringField(payload, "fixRecommendation") ?? stringField(rule, "fixRecommendation"),
+      longStringField(payload, "vulnerabilityDescription") ?? longStringField(rule, "vulnerabilityDescription"),
+    fixRecommendation: longStringField(payload, "fixRecommendation") ?? longStringField(rule, "fixRecommendation"),
   };
 }
 
+function validateSecurityHotspotSummaryPayload(hotspot: unknown): string | undefined {
+  const payload = asRecord(hotspot);
+  if (!identifierField(payload, "key")) return "missing non-empty hotspot key";
+
+  return undefined;
+}
+
+function requiredHotspotKey(payload: Record<string, unknown>): string {
+  const key = identifierField(payload, "key");
+  if (key) return key;
+
+  throw new Error("Malformed Sonar security hotspot payload: missing non-empty hotspot key.");
+}
+
+function buildHotspotMappingWarnings(invalidRows: SonarMappingInvalidRow[]): string[] {
+  if (invalidRows.length === 0) return [];
+
+  return [
+    `Skipped ${invalidRows.length} malformed Sonar hotspot row(s) because each hotspot must include a non-empty key for follow-up detail calls.`,
+  ];
+}
+
 function mapHotspotLocation(payload: Record<string, unknown>): SonarIssueLocation {
-  const component = stringField(payload, "component");
+  const component = mediumStringField(payload, "component");
   const textRange = mapTextRange(payload.textRange);
 
   return {
@@ -115,7 +200,7 @@ function mapHotspotLocation(payload: Record<string, unknown>): SonarIssueLocatio
 
 function mapLocationPayload(value: unknown): SonarIssueLocation {
   const payload = asRecord(value);
-  const component = stringField(payload, "component");
+  const component = mediumStringField(payload, "component");
   const textRange = mapTextRange(payload.textRange);
 
   return {
@@ -190,9 +275,16 @@ function arrayField(record: Record<string, unknown>, key: string): unknown[] {
   return Array.isArray(value) ? value : [];
 }
 
-function stringField(record: Record<string, unknown>, key: string): string | undefined {
-  const value = record[key];
-  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
+function identifierField(record: Record<string, unknown>, key: string): string | undefined {
+  return safeSonarString(record[key], SONAR_IDENTIFIER_TEXT_MAX_CHARS);
+}
+
+function mediumStringField(record: Record<string, unknown>, key: string): string | undefined {
+  return safeSonarString(record[key], SONAR_MEDIUM_TEXT_MAX_CHARS);
+}
+
+function longStringField(record: Record<string, unknown>, key: string): string | undefined {
+  return safeSonarString(record[key], SONAR_LONG_TEXT_MAX_CHARS);
 }
 
 function numberField(record: Record<string, unknown>, key: string): number | undefined {

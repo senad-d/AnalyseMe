@@ -4,10 +4,21 @@ import { Type } from "typebox";
 import { ANALYSEME_TOOL_NAMES } from "../constants.ts";
 import { buildIssueSearchEndpoint } from "../sonar/endpoints.ts";
 import { createSonarClient } from "../sonar/client.ts";
-import type { AgentIssueSummary, SonarIssueLike } from "../sonar/issue-mapping.ts";
-import { isActiveSonarIssue, mapIssueSummary } from "../sonar/issue-mapping.ts";
+import type { AgentIssueSummary, SonarIssueLike, SonarMappingInvalidRow } from "../sonar/issue-mapping.ts";
+import { isActiveSonarIssue, mapIssueSummariesWithDiagnostics } from "../sonar/issue-mapping.ts";
+import { summarizeSonarTextSafety } from "../utils/text-safety.ts";
+import type { SonarTextSafetySummary } from "../utils/text-safety.ts";
 import { truncateAnalyseMeText } from "../utils/truncation.ts";
-import { normalizePositiveInteger, renderAnalysisScope, resolveProjectToolContext } from "./shared.ts";
+import {
+  asRecord,
+  booleanField,
+  normalizePositiveInteger,
+  numberField,
+  renderAnalysisScope,
+  renderLocation,
+  resolveProjectToolContext,
+  stringField,
+} from "./shared.ts";
 
 export interface ListIssuesToolInput {
   projectKey?: string;
@@ -24,7 +35,15 @@ export interface ListIssuesPagination {
   total?: number;
   activeReturned: number;
   excludedNonActive: number;
+  malformedRowsSkipped: number;
   shown: number;
+}
+
+export interface ListIssuesPartialData {
+  warnings: string[];
+  invalidRows: SonarMappingInvalidRow[];
+  malformedRowsSkipped: number;
+  missingIssuesArray: boolean;
 }
 
 export interface ListIssuesDetails {
@@ -36,8 +55,11 @@ export interface ListIssuesDetails {
   pagination: ListIssuesPagination;
   request: ReturnType<typeof buildIssueSearchEndpoint>;
   exclusionNote: string;
+  warnings: string[];
+  partialData: ListIssuesPartialData;
   truncation: ReturnType<typeof truncateAnalyseMeText>["metadata"];
   truncated: boolean;
+  textSafety: SonarTextSafetySummary;
 }
 
 const DEFAULT_ISSUE_LIMIT = 50;
@@ -112,11 +134,23 @@ export async function executeListIssuesTool(
   const request = buildIssueSearchEndpoint({ ...resolvedContext.endpointOptions, page, pageSize });
   const client = createSonarClient(resolvedContext.config);
   const response = await client.getJson<unknown>({ ...request, signal });
-  const rawIssues = extractIssuePayloads(response);
-  const activeIssuePayloads = filterActiveIssuePayloads(rawIssues);
-  const issues = activeIssuePayloads.map(mapIssueSummary);
+  const issuePayloads = extractIssuePayloads(response);
+  const activeIssuePayloads = filterActiveIssuePayloads(issuePayloads.issues);
+  const mappingResult = mapIssueSummariesWithDiagnostics(activeIssuePayloads);
+  const issues = mappingResult.issues;
+  const warnings = [...issuePayloads.warnings, ...mappingResult.warnings];
   const scopeLabel = renderAnalysisScope(resolvedContext.scope);
-  const pagination = readListIssuesPagination(response, page, pageSize, rawIssues.length, issues.length);
+  const pagination = readListIssuesPagination(
+    response,
+    page,
+    pageSize,
+    issuePayloads.issues.length,
+    activeIssuePayloads.length,
+    issues.length,
+    mappingResult.invalidRows.length,
+  );
+  const partialData = buildListIssuesPartialData(issuePayloads.missingIssuesArray, mappingResult.invalidRows, warnings);
+  const textSafety = summarizeSonarTextSafety({ issues, warnings });
   const rendered = renderListIssues({
     projectKey: resolvedContext.projectKey,
     projectKeySource: resolvedContext.projectKeySource,
@@ -124,6 +158,7 @@ export async function executeListIssuesTool(
     scope: scopeLabel,
     issues,
     pagination,
+    warnings,
   });
   const truncated = truncateAnalyseMeText(rendered);
 
@@ -138,17 +173,47 @@ export async function executeListIssuesTool(
       pagination,
       request,
       exclusionNote: NON_ACTIVE_EXCLUSION_NOTE,
+      warnings,
+      partialData,
       truncation: truncated.metadata,
       truncated: truncated.metadata.truncated,
+      textSafety,
     },
   };
 }
 
-function extractIssuePayloads(response: unknown): unknown[] {
+interface IssuePayloadExtractionResult {
+  issues: unknown[];
+  warnings: string[];
+  missingIssuesArray: boolean;
+}
+
+function extractIssuePayloads(response: unknown): IssuePayloadExtractionResult {
   const payload = asRecord(response);
   const issues = payload.issues;
 
-  return Array.isArray(issues) ? issues : [];
+  if (!Array.isArray(issues)) {
+    return {
+      issues: [],
+      warnings: ["Sonar issue search response did not include an issues array; no issue rows were mapped."],
+      missingIssuesArray: true,
+    };
+  }
+
+  return { issues, warnings: [], missingIssuesArray: false };
+}
+
+function buildListIssuesPartialData(
+  missingIssuesArray: boolean,
+  invalidRows: SonarMappingInvalidRow[],
+  warnings: string[],
+): ListIssuesPartialData {
+  return {
+    warnings,
+    invalidRows,
+    malformedRowsSkipped: invalidRows.length,
+    missingIssuesArray,
+  };
 }
 
 function filterActiveIssuePayloads(issues: unknown[]): unknown[] {
@@ -182,6 +247,8 @@ function readListIssuesPagination(
   pageSize: number,
   rawReturned: number,
   activeReturned: number,
+  shown: number,
+  malformedRowsSkipped: number,
 ): ListIssuesPagination {
   const payload = asRecord(response);
   const paging = asRecord(payload.paging);
@@ -192,7 +259,8 @@ function readListIssuesPagination(
     total: numberField(paging, "total") ?? numberField(payload, "total"),
     activeReturned,
     excludedNonActive: Math.max(0, rawReturned - activeReturned),
-    shown: activeReturned,
+    malformedRowsSkipped,
+    shown,
   };
 }
 
@@ -203,6 +271,7 @@ function renderListIssues(input: {
   scope: string;
   issues: AgentIssueSummary[];
   pagination: ListIssuesPagination;
+  warnings: string[];
 }): string {
   const lines = [
     `# AnalyseMe active issues: ${input.projectKey}`,
@@ -215,16 +284,27 @@ function renderListIssues(input: {
     `- Server total: ${input.pagination.total ?? "unavailable"}`,
     `- Active issues shown: ${input.pagination.shown}`,
     `- Excluded from this page: ${input.pagination.excludedNonActive}`,
-    `- Exclusion note: ${NON_ACTIVE_EXCLUSION_NOTE}`,
-    "",
-    "## Issues",
   ];
+
+  if (input.pagination.malformedRowsSkipped > 0) {
+    lines.push(`- Malformed rows skipped: ${input.pagination.malformedRowsSkipped}`);
+  }
+
+  lines.push(`- Exclusion note: ${NON_ACTIVE_EXCLUSION_NOTE}`, "", "## Issues");
 
   if (input.issues.length === 0) lines.push("- No active issues returned for this page.");
 
   input.issues.forEach((issue, index) => {
     lines.push(...renderIssueRow(issue, index + 1));
   });
+
+  if (input.warnings.length > 0) {
+    lines.push("", "## Warnings");
+
+    for (const warning of input.warnings) {
+      lines.push(`- ${warning}`);
+    }
+  }
 
   return lines.join("\n");
 }
@@ -260,42 +340,5 @@ function renderStatusAndResolution(issue: AgentIssueSummary): string {
 }
 
 function renderIssueLocation(issue: AgentIssueSummary): string {
-  const component = issue.location.component ?? "unavailable component";
-  const file = issue.location.file ? ` (${issue.location.file})` : "";
-  const line = issue.location.line ? `:${issue.location.line}` : "";
-  const range = renderTextRange(issue.location.textRange);
-
-  return `${component}${file}${line}${range}`;
-}
-
-function renderTextRange(textRange: AgentIssueSummary["location"]["textRange"]): string {
-  if (!textRange) return "";
-
-  const startLine = textRange.startLine ?? "?";
-  const endLine = textRange.endLine ?? startLine;
-  const startOffset = textRange.startOffset ?? "?";
-  const endOffset = textRange.endOffset ?? "?";
-
-  return ` (range ${startLine}:${startOffset}-${endLine}:${endOffset})`;
-}
-
-function asRecord(value: unknown): Record<string, unknown> {
-  if (typeof value === "object" && value !== null) return value as Record<string, unknown>;
-
-  return {};
-}
-
-function stringField(record: Record<string, unknown>, key: string): string | undefined {
-  const value = record[key];
-  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
-}
-
-function booleanField(record: Record<string, unknown>, key: string): boolean | undefined {
-  const value = record[key];
-  return typeof value === "boolean" ? value : undefined;
-}
-
-function numberField(record: Record<string, unknown>, key: string): number | undefined {
-  const value = record[key];
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+  return renderLocation(issue.location);
 }

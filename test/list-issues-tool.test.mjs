@@ -14,6 +14,7 @@ const envKeys = [
   "SONARQUBE_PROJECT_KEY",
   "SONARQUBE_BRANCH",
   "SONARQUBE_PULL_REQUEST",
+  "SONARQUBE_ALLOW_INSECURE_HTTP",
 ];
 
 class IssueRouteFetch {
@@ -126,7 +127,7 @@ test("executes analyseme_list_issues, filters non-active issues, and returns pag
 
     const result = await executeListIssuesTool(
       "call-issues",
-      { projectKey: "demo", organization: "arg-org", pullRequest: "17", page: 2, limit: 5 },
+      { projectKey: " demo ", organization: " arg-org ", pullRequest: " 17 ", page: 2, limit: 5 },
       undefined,
       undefined,
       { cwd },
@@ -158,6 +159,57 @@ test("executes analyseme_list_issues, filters non-active issues, and returns pag
     assert.match(routeFetch.calls[0].url, /pullRequest=17/);
     assert.match(routeFetch.calls[0].url, /organization=arg-org/);
     assert.doesNotMatch(serializedDetails, /issues-secret-token/);
+  } finally {
+    restoreEnv(envSnapshot);
+    globalThis.fetch = fetchSnapshot;
+    await removeTempDir(cwd);
+  }
+});
+
+test("analyseme_list_issues reports malformed active rows without rendering placeholder keys", async () => {
+  const cwd = await createTempDir();
+  const envSnapshot = snapshotEnv();
+  const fetchSnapshot = globalThis.fetch;
+  const response = createSearchResponse(
+    [
+      { message: "Missing key from Sonar", issueStatus: "OPEN" },
+      activeIssue("ACTIVE-1"),
+      activeIssue("ACCEPTED", { issueStatus: "ACCEPTED" }),
+    ],
+    1,
+    3,
+    3,
+  );
+  const routeFetch = new IssueRouteFetch(response);
+
+  try {
+    applyEnv({
+      SONARQUBE_URL: "https://sonar.example.com",
+      SONARQUBE_TOKEN: "issues-secret-token",
+    });
+    globalThis.fetch = routeFetch.fetch.bind(routeFetch);
+
+    const result = await executeListIssuesTool(
+      "call-issues-malformed",
+      { projectKey: "demo", limit: 3 },
+      undefined,
+      undefined,
+      { cwd },
+    );
+    const content = result.content[0].text;
+
+    assert.match(content, /ACTIVE-1/);
+    assert.doesNotMatch(content, /unknown-issue/);
+    assert.match(content, /Warnings/);
+    assert.match(content, /Skipped 1 malformed Sonar issue row/);
+    assert.equal(result.details.issues.length, 1);
+    assert.equal(result.details.pagination.activeReturned, 2);
+    assert.equal(result.details.pagination.excludedNonActive, 1);
+    assert.equal(result.details.pagination.malformedRowsSkipped, 1);
+    assert.equal(result.details.pagination.shown, 1);
+    assert.equal(result.details.partialData.malformedRowsSkipped, 1);
+    assert.equal(result.details.partialData.invalidRows[0].reason, "missing non-empty issue key");
+    assert.match(result.details.warnings.join("\n"), /malformed Sonar issue row/);
   } finally {
     restoreEnv(envSnapshot);
     globalThis.fetch = fetchSnapshot;

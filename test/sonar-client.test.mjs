@@ -110,9 +110,24 @@ test("maps fetch failures and redacts token values", async () => {
   );
 });
 
-test("rejects absolute request paths to keep calls bound to configured Sonar URL", () => {
-  assert.throws(
-    () => buildSonarApiUrl("https://sonar.example.com", { path: "https://evil.example.com/api/issues/search" }),
-    SonarApiError,
-  );
+test("rejects externally rooted request paths to keep calls bound to configured Sonar URL", () => {
+  const rejectedPaths = [
+    "https://evil.example.com/api/issues/search",
+    "http://evil.example.com/api/issues/search",
+    "ftp://evil.example.com/api/issues/search",
+    "//evil.example.com/api/issues/search",
+    "  //evil.example.com/api/issues/search  ",
+  ];
+
+  for (const path of rejectedPaths) {
+    assert.throws(() => buildSonarApiUrl("https://sonar.example.com", { path }), SonarApiError);
+  }
+});
+
+test("rejects protocol-relative request paths before fetch and authorization headers", async () => {
+  const { calls, fetchImpl } = createCapturingFetch(createJsonResponse({}));
+  const client = createSonarClient(createConfig(), { fetch: fetchImpl });
+
+  await assert.rejects(client.getJson({ path: "//evil.example.com/api/issues/search" }), SonarApiError);
+  assert.equal(calls.length, 0);
 });

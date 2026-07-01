@@ -1,7 +1,12 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import { DEFAULT_ENV_FILE_NAME, SONAR_ENV_VAR_NAMES, SONAR_ENV_VARS } from "../constants.ts";
+import {
+  DEFAULT_ENV_FILE_NAME,
+  SONAR_ALLOW_INSECURE_HTTP_ENV_VAR,
+  SONAR_ENV_VAR_NAMES,
+  SONAR_ENV_VARS,
+} from "../constants.ts";
 import { maskSecretPresence } from "../utils/mask.ts";
 import type {
   AnalyseMeConfigLoadOptions,
@@ -23,9 +28,11 @@ interface ParsedEnvFile {
 interface RequiredFieldResult {
   value?: string;
   errors: string[];
+  warnings: string[];
 }
 
 const EMPTY_ENV_FILE_VALUES: Record<string, string> = {};
+const INSECURE_HTTP_WARNING = `${SONAR_ENV_VARS.url} uses non-TLS HTTP. Sonar tokens are sent without TLS because ${SONAR_ALLOW_INSECURE_HTTP_ENV_VAR}=true is enabled; use only for local or trusted development endpoints.`;
 
 export async function loadAnalyseMeConfig(
   options: AnalyseMeConfigLoadOptions = {},
@@ -35,12 +42,14 @@ export async function loadAnalyseMeConfig(
   const envFilePath = options.envFilePath ?? join(cwd, DEFAULT_ENV_FILE_NAME);
   const parsedEnvFile = await loadOptionalEnvFile(envFilePath, options.readEnvFile ?? true);
   const sources = collectConfigValues(env, parsedEnvFile.values);
+  const allowInsecureHttp = resolveAllowInsecureHttp(env, parsedEnvFile.values);
   const warnings: string[] = [];
   const errors: string[] = [];
-  const urlField = validateRequiredUrl(sources[SONAR_ENV_VARS.url]);
+  const urlField = validateRequiredUrl(sources[SONAR_ENV_VARS.url], allowInsecureHttp);
   const tokenField = validateRequiredText(SONAR_ENV_VARS.token, sources[SONAR_ENV_VARS.token]);
 
   errors.push(...urlField.errors, ...tokenField.errors);
+  warnings.push(...urlField.warnings);
   errors.push(...validateConfiguredScope(sources));
 
   if (errors.length > 0 || !urlField.value || !tokenField.value) {
@@ -58,6 +67,7 @@ export async function loadAnalyseMeConfig(
       pullRequest: sources[SONAR_ENV_VARS.pullRequest].value,
       sources,
       tokenDisplay: maskSecretPresence(tokenField.value),
+      allowInsecureHttp,
     },
     errors,
     warnings,
@@ -77,7 +87,7 @@ export async function requireAnalyseMeConfig(
   return result.config;
 }
 
-export function normalizeSonarUrl(value: string): string {
+export function normalizeSonarUrl(value: string, options: { allowInsecureHttp?: boolean } = {}): string {
   const trimmed = value.trim();
 
   if (trimmed.length === 0) {
@@ -91,11 +101,27 @@ export function normalizeSonarUrl(value: string): string {
     throw new Error(`${SONAR_ENV_VARS.url} must use http or https.`);
   }
 
+  if (parsed.protocol === "http:" && options.allowInsecureHttp !== true) {
+    throw new Error(
+      `${SONAR_ENV_VARS.url} uses non-TLS HTTP. Use https or set ${SONAR_ALLOW_INSECURE_HTTP_ENV_VAR}=true only for local or trusted development endpoints.`,
+    );
+  }
+
   if (parsed.hostname.length === 0) {
     throw new Error(`${SONAR_ENV_VARS.url} must include a host.`);
   }
 
   return normalized;
+}
+
+export function isInsecureSonarHttpUrl(value: string | undefined): boolean {
+  if (!value) return false;
+
+  try {
+    return new URL(value).protocol === "http:";
+  } catch {
+    return false;
+  }
 }
 
 export function parseEnvFileContent(content: string): Record<string, string> {
@@ -162,15 +188,32 @@ function collectConfigValue(
   return { value: undefined, source: "missing" };
 }
 
-function validateRequiredUrl(field: LoadedConfigValue): RequiredFieldResult {
+function resolveAllowInsecureHttp(env: NodeJS.ProcessEnv, envFileValues: Record<string, string>): boolean {
+  const environmentValue = normalizeOptionalText(env[SONAR_ALLOW_INSECURE_HTTP_ENV_VAR]);
+  const envFileValue = normalizeOptionalText(envFileValues[SONAR_ALLOW_INSECURE_HTTP_ENV_VAR]);
+  const selectedValue = environmentValue ?? envFileValue;
+
+  return isTruthyConfigFlag(selectedValue);
+}
+
+function isTruthyConfigFlag(value: string | undefined): boolean {
+  if (!value) return false;
+
+  return ["1", "true", "yes", "on"].includes(value.trim().toLowerCase());
+}
+
+function validateRequiredUrl(field: LoadedConfigValue, allowInsecureHttp: boolean): RequiredFieldResult {
   const required = validateRequiredText(SONAR_ENV_VARS.url, field);
 
   if (!required.value) return required;
 
   try {
-    return { value: normalizeSonarUrl(required.value), errors: [] };
+    const value = normalizeSonarUrl(required.value, { allowInsecureHttp });
+    const warnings = isInsecureSonarHttpUrl(value) ? [INSECURE_HTTP_WARNING] : [];
+
+    return { value, errors: [], warnings };
   } catch (error) {
-    return { errors: [`Invalid ${SONAR_ENV_VARS.url}: ${errorMessage(error)}`] };
+    return { errors: [`Invalid ${SONAR_ENV_VARS.url}: ${errorMessage(error)}`], warnings: [] };
   }
 }
 
@@ -178,10 +221,11 @@ function validateRequiredText(name: SonarEnvVarName, field: LoadedConfigValue): 
   if (!field.value) {
     return {
       errors: [`Missing required ${name}. Set ${name} in the environment or local ${DEFAULT_ENV_FILE_NAME}.`],
+      warnings: [],
     };
   }
 
-  return { value: field.value, errors: [] };
+  return { value: field.value, errors: [], warnings: [] };
 }
 
 function validateConfiguredScope(values: LoadedConfigValues): string[] {

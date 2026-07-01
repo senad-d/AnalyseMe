@@ -11,10 +11,10 @@ import { registerProjectSummaryTool } from "./tools/project-summary.ts";
 /**
  * AnalyseMe extension entry point.
  *
- * Runtime status: Pi surfaces are intentionally registered only after each
- * command/tool feature is implemented and tested. Keep this file small: import
- * feature modules and call their register* functions here only when they are
- * ready.
+ * Runtime status: the read-only command, five Sonar tools, and lightweight
+ * lifecycle status hooks are implemented and registered here. Keep this file
+ * small: import feature modules and call their register* functions here after
+ * the feature is implemented and tested.
  */
 export default function analyseMeExtension(pi: ExtensionAPI) {
   registerProjectSummaryTool(pi);
@@ -24,7 +24,4 @@ export default function analyseMeExtension(pi: ExtensionAPI) {
   registerGetSecurityHotspotTool(pi);
   registerAnalyseMeCommand(pi);
   registerAnalyseMeLifecycle(pi);
-
-  // Planned, not registered here yet:
-  // - /analyseme read-only config TUI
 }

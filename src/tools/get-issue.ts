@@ -2,10 +2,6 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import { Type } from "typebox";
 
 import { ANALYSEME_TOOL_NAMES } from "../constants.ts";
-import { resolveAnalysisScope } from "../config/analysis-scope.ts";
-import { requireAnalyseMeConfig } from "../config/load-config.ts";
-import { resolveProjectKey } from "../config/project-key.ts";
-import type { AnalysisScopeResolution, SonarConnectionConfig } from "../config/types.ts";
 import {
   buildIssueDetailEndpoint,
   buildRuleDetailEndpoint,
@@ -17,9 +13,25 @@ import { createSonarClient } from "../sonar/client.ts";
 import type { SonarClient } from "../sonar/client.ts";
 import type { AgentIssueDetail, AgentIssueSummary } from "../sonar/issue-mapping.ts";
 import { mapIssueDetail } from "../sonar/issue-mapping.ts";
-import { redactSecrets } from "../utils/mask.ts";
-import { renderAnalysisScope } from "./shared.ts";
+import { rethrowIfAbortError, throwIfAborted } from "../utils/abort.ts";
+import { safeSonarWarningText, summarizeSonarTextSafety } from "../utils/text-safety.ts";
+import type { SonarTextSafetySummary } from "../utils/text-safety.ts";
 import { truncateAnalyseMeText } from "../utils/truncation.ts";
+import {
+  asRecord,
+  buildScopeEndpointOptions,
+  buildSonarUiUrl,
+  buildSourceShowEndpointOptions,
+  errorMessage,
+  normalizeProjectScopedToolInput,
+  numberField,
+  renderAnalysisScope,
+  renderLocation,
+  requireNonEmptyToolString,
+  resolveOptionalProjectToolContext,
+  stringField,
+} from "./shared.ts";
+import type { OptionalProjectToolContext } from "./shared.ts";
 
 export interface GetIssueToolInput {
   issueKey: string;
@@ -50,14 +62,7 @@ export interface GetIssueDetails {
   warnings: string[];
   truncation: ReturnType<typeof truncateAnalyseMeText>["metadata"];
   truncated: boolean;
-}
-
-interface OptionalProjectContext {
-  config: SonarConnectionConfig;
-  projectKey?: string;
-  projectKeySource?: string;
-  organization?: string;
-  scope: AnalysisScopeResolution;
+  textSafety: SonarTextSafetySummary;
 }
 
 interface RuleReadResult {
@@ -74,7 +79,9 @@ interface SourceReadResult {
 
 const getIssueParameters = Type.Object({
   issueKey: Type.String({
-    description: "Sonar issue key/id to retrieve with location context and Sonar-provided rule guidance.",
+    minLength: 1,
+    description:
+      "Required Sonar issue key/id to retrieve with location context and Sonar-provided rule guidance. Empty values are rejected.",
   }),
   projectKey: Type.Optional(
     Type.String({
@@ -123,15 +130,17 @@ export async function executeGetIssueTool(
   _onUpdate: unknown,
   ctx: ExtensionContext,
 ): Promise<{ content: Array<{ type: "text"; text: string }>; details: GetIssueDetails }> {
-  const resolvedContext = await resolveOptionalProjectContext(ctx, params);
-  const issueRequest = buildIssueDetailEndpoint(buildIssueEndpointOptions(params.issueKey, resolvedContext));
+  const issueKey = requireNonEmptyToolString(params.issueKey, "issueKey", "a Sonar issue key such as ISSUE-123");
+  const normalizedParams = normalizeProjectScopedToolInput(params);
+  const resolvedContext = await resolveOptionalProjectToolContext(ctx, normalizedParams);
+  const issueRequest = buildIssueDetailEndpoint({ issueKey, ...buildScopeEndpointOptions(resolvedContext) });
   const client = createSonarClient(resolvedContext.config);
   const issueResponse = await client.getJson<unknown>({ ...issueRequest, signal });
-  const issuePayload = extractSingleIssuePayload(issueResponse, params.issueKey);
+  const issuePayload = extractSingleIssuePayload(issueResponse, issueKey);
   const ruleResult = await readRulePayload(client, issuePayload, resolvedContext.organization, signal, resolvedContext.config.token);
   const sourceResult = await readSourcePayload(
     client,
-    params.issueKey,
+    issueKey,
     issuePayload,
     resolvedContext,
     signal,
@@ -139,6 +148,7 @@ export async function executeGetIssueTool(
   );
   const issue = mapIssueDetail(issuePayload, ruleResult.rule, sourceResult.source);
   const warnings = [...ruleResult.warnings, ...sourceResult.warnings];
+  const textSafety = summarizeSonarTextSafety({ issue, warnings });
   const links = buildIssueLinks(resolvedContext.config.url, issue, resolvedContext.projectKey);
   const rendered = renderIssueDetail(issue, resolvedContext, links, warnings);
   const truncated = truncateAnalyseMeText(rendered);
@@ -146,7 +156,7 @@ export async function executeGetIssueTool(
   return {
     content: [{ type: "text", text: truncated.text }],
     details: {
-      issueKey: params.issueKey,
+      issueKey,
       projectKey: resolvedContext.projectKey,
       projectKeySource: resolvedContext.projectKeySource,
       organization: resolvedContext.organization,
@@ -161,80 +171,22 @@ export async function executeGetIssueTool(
       warnings,
       truncation: truncated.metadata,
       truncated: truncated.metadata.truncated,
+      textSafety,
     },
   };
-}
-
-async function resolveOptionalProjectContext(
-  ctx: ExtensionContext,
-  params: GetIssueToolInput,
-): Promise<OptionalProjectContext> {
-  const config = await requireAnalyseMeConfig({ cwd: ctx.cwd });
-  const projectKeyResolution = await resolveProjectKey({
-    cwd: ctx.cwd,
-    explicitProjectKey: params.projectKey,
-    configuredProjectKey: config.projectKey,
-  });
-  const scope = await resolveAnalysisScope({
-    cwd: ctx.cwd,
-    explicitBranch: params.branch,
-    explicitPullRequest: params.pullRequest,
-    configuredBranch: config.branch,
-    configuredPullRequest: config.pullRequest,
-  });
-
-  return {
-    config,
-    projectKey: projectKeyResolution.projectKey,
-    projectKeySource: projectKeyResolution.projectKey ? projectKeyResolution.source : undefined,
-    organization: normalizeOptionalText(params.organization) ?? config.organization,
-    scope,
-  };
-}
-
-function buildIssueEndpointOptions(
-  issueKey: string,
-  context: OptionalProjectContext,
-): { issueKey: string; organization?: string; branch?: string; pullRequest?: string } {
-  if (context.scope.scope.kind === "branch") {
-    return { issueKey, organization: context.organization, branch: context.scope.scope.branch };
-  }
-
-  if (context.scope.scope.kind === "pullRequest") {
-    return { issueKey, organization: context.organization, pullRequest: context.scope.scope.pullRequest };
-  }
-
-  return { issueKey, organization: context.organization };
-}
-
-function buildSourceEndpointOptions(
-  componentKey: string,
-  line: number,
-  context: OptionalProjectContext,
-): { componentKey: string; from: number; to: number; organization?: string; branch?: string; pullRequest?: string } {
-  const from = Math.max(1, line - 3);
-  const to = line + 3;
-
-  if (context.scope.scope.kind === "branch") {
-    return { componentKey, from, to, organization: context.organization, branch: context.scope.scope.branch };
-  }
-
-  if (context.scope.scope.kind === "pullRequest") {
-    return { componentKey, from, to, organization: context.organization, pullRequest: context.scope.scope.pullRequest };
-  }
-
-  return { componentKey, from, to, organization: context.organization };
 }
 
 function extractSingleIssuePayload(response: unknown, issueKey: string): unknown {
   const payload = asRecord(response);
   const issues = Array.isArray(payload.issues) ? payload.issues : [];
 
-  if (issues.length === 0) {
-    throw new Error(`Sonar issue ${issueKey} was not found.`);
+  const matchingIssue = issues.find((issue) => stringField(asRecord(issue), "key") === issueKey);
+
+  if (!matchingIssue) {
+    throw new Error(`Sonar issue ${issueKey} was not found in the issue detail response.`);
   }
 
-  return issues[0];
+  return matchingIssue;
 }
 
 async function readRulePayload(
@@ -255,7 +207,8 @@ async function readRulePayload(
     const response = await client.getJson<unknown>({ ...request, signal });
     return { rule: extractRulePayload(response), request, warnings: [] };
   } catch (error) {
-    return { request, warnings: [`Rule metadata unavailable: ${redactSecrets(errorMessage(error), [token])}`] };
+    rethrowIfAbortError(error, signal);
+    return { request, warnings: [`Rule metadata unavailable: ${safeSonarWarningText(errorMessage(error), [token])}`] };
   }
 }
 
@@ -263,13 +216,14 @@ async function readSourcePayload(
   client: SonarClient,
   issueKey: string,
   issuePayload: unknown,
-  context: OptionalProjectContext,
+  context: OptionalProjectToolContext,
   signal: AbortSignal | undefined,
   token: string,
 ): Promise<SourceReadResult> {
   const snippetResult = await readSourceIssueSnippets(client, issueKey, context.organization, signal, token);
   if (snippetResult.source) return snippetResult;
 
+  throwIfAborted(signal);
   const fallbackResult = await readSourceShowFallback(client, issuePayload, context, signal, token);
 
   return {
@@ -292,9 +246,10 @@ async function readSourceIssueSnippets(
     const source = await client.getJson<unknown>({ ...request, signal });
     return { source, requests: [request], warnings: [] };
   } catch (error) {
+    rethrowIfAbortError(error, signal);
     return {
       requests: [request],
-      warnings: [`Source issue snippets unavailable: ${redactSecrets(errorMessage(error), [token])}`],
+      warnings: [`Source issue snippets unavailable: ${safeSonarWarningText(errorMessage(error), [token])}`],
     };
   }
 }
@@ -302,7 +257,7 @@ async function readSourceIssueSnippets(
 async function readSourceShowFallback(
   client: SonarClient,
   issuePayload: unknown,
-  context: OptionalProjectContext,
+  context: OptionalProjectToolContext,
   signal: AbortSignal | undefined,
   token: string,
 ): Promise<SourceReadResult> {
@@ -314,15 +269,16 @@ async function readSourceShowFallback(
     return { requests: [], warnings: ["Source fallback unavailable because issue component or line is missing."] };
   }
 
-  const request = buildSourceShowEndpoint(buildSourceEndpointOptions(component, line, context));
+  const request = buildSourceShowEndpoint(buildSourceShowEndpointOptions(component, line, context));
 
   try {
     const source = await client.getJson<unknown>({ ...request, signal });
     return { source, requests: [request], warnings: [] };
   } catch (error) {
+    rethrowIfAbortError(error, signal);
     return {
       requests: [request],
-      warnings: [`Source fallback unavailable: ${redactSecrets(errorMessage(error), [token])}`],
+      warnings: [`Source fallback unavailable: ${safeSonarWarningText(errorMessage(error), [token])}`],
     };
   }
 }
@@ -334,28 +290,16 @@ function extractRulePayload(response: unknown): unknown {
 
 function buildIssueLinks(baseUrl: string, issue: AgentIssueDetail, projectKey: string | undefined): IssueLinks {
   return {
-    issue: projectKey ? buildUrl(baseUrl, "/project/issues", { id: projectKey, issues: issue.key, open: issue.key }) : undefined,
-    rule: issue.rule ? buildUrl(baseUrl, "/coding_rules", { open: issue.rule, rule_key: issue.rule }) : undefined,
+    issue: projectKey
+      ? buildSonarUiUrl(baseUrl, "/project/issues", { id: projectKey, issues: issue.key, open: issue.key })
+      : undefined,
+    rule: issue.rule ? buildSonarUiUrl(baseUrl, "/coding_rules", { open: issue.rule, rule_key: issue.rule }) : undefined,
   };
-}
-
-function buildUrl(baseUrl: string, path: string, query: Record<string, string>): string | undefined {
-  try {
-    const url = new URL(path, `${baseUrl}/`);
-
-    for (const [key, value] of Object.entries(query)) {
-      url.searchParams.set(key, value);
-    }
-
-    return url.toString();
-  } catch {
-    return undefined;
-  }
 }
 
 function renderIssueDetail(
   issue: AgentIssueDetail,
-  context: OptionalProjectContext,
+  context: OptionalProjectToolContext,
   links: IssueLinks,
   warnings: string[],
 ): string {
@@ -457,50 +401,3 @@ function renderIssueLocation(issue: AgentIssueDetail): string {
   return renderLocation(issue.location);
 }
 
-function renderLocation(location: AgentIssueSummary["location"]): string {
-  const component = location.component ?? "unavailable component";
-  const file = location.file ? ` (${location.file})` : "";
-  const line = location.line ? `:${location.line}` : "";
-  const range = renderTextRange(location.textRange);
-
-  return `${component}${file}${line}${range}`;
-}
-
-function renderTextRange(textRange: AgentIssueSummary["location"]["textRange"]): string {
-  if (!textRange) return "";
-
-  const startLine = textRange.startLine ?? "?";
-  const endLine = textRange.endLine ?? startLine;
-  const startOffset = textRange.startOffset ?? "?";
-  const endOffset = textRange.endOffset ?? "?";
-
-  return ` (range ${startLine}:${startOffset}-${endLine}:${endOffset})`;
-}
-
-function normalizeOptionalText(value: string | undefined): string | undefined {
-  if (typeof value !== "string") return undefined;
-
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : undefined;
-}
-
-function asRecord(value: unknown): Record<string, unknown> {
-  if (typeof value === "object" && value !== null) return value as Record<string, unknown>;
-
-  return {};
-}
-
-function stringField(record: Record<string, unknown>, key: string): string | undefined {
-  const value = record[key];
-  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
-}
-
-function numberField(record: Record<string, unknown>, key: string): number | undefined {
-  const value = record[key];
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
-}
-
-function errorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  return String(error);
-}

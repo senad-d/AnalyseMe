@@ -17,6 +17,7 @@ const envKeys = [
   "SONARQUBE_PROJECT_KEY",
   "SONARQUBE_BRANCH",
   "SONARQUBE_PULL_REQUEST",
+  "SONARQUBE_ALLOW_INSECURE_HTTP",
 ];
 
 class GetHotspotRouteFetch {
@@ -29,12 +30,19 @@ class GetHotspotRouteFetch {
 
   async fetch(url, init) {
     this.calls.push({ url, init });
-    return this.handler(url);
+    return this.handler(url, init);
   }
 }
 
 function jsonResponse(payload, status = 200) {
   return new Response(JSON.stringify(payload), { status });
+}
+
+function abortError(message = "The operation was aborted.") {
+  const error = new Error(message);
+  error.name = "AbortError";
+
+  return error;
 }
 
 function snapshotEnv() {
@@ -102,6 +110,7 @@ test("registers analyseme_get_security_hotspot with schema and prompt guidance",
   assert.equal(tools.length, 1);
   assert.equal(tools[0].name, ANALYSEME_TOOL_NAMES.getSecurityHotspot);
   assert.ok(tools[0].parameters.properties.hotspotKey);
+  assert.equal(tools[0].parameters.properties.hotspotKey.minLength, 1);
   assert.ok(tools[0].parameters.properties.projectKey);
   assert.ok(tools[0].promptSnippet);
   assert.ok(
@@ -137,7 +146,7 @@ test("executes analyseme_get_security_hotspot with source, flow, and Sonar secur
 
     const result = await executeGetSecurityHotspotTool(
       "call-get-hotspot",
-      { hotspotKey: "HOTSPOT-1", projectKey: "demo", organization: "arg-org", pullRequest: "19" },
+      { hotspotKey: " HOTSPOT-1 ", projectKey: " demo ", organization: " arg-org ", pullRequest: " 19 " },
       undefined,
       undefined,
       { cwd },
@@ -157,6 +166,9 @@ test("executes analyseme_get_security_hotspot with source, flow, and Sonar secur
     assert.equal(result.details.hotspot.sourceSnippets.length, 2);
     assert.equal(result.details.hotspot.secondaryLocations.length, 1);
     assert.equal(result.details.hotspot.flows.length, 1);
+    assert.equal(result.details.hotspotKey, "HOTSPOT-1");
+    assert.equal(result.details.projectKey, "demo");
+    assert.equal(result.details.organization, "arg-org");
     assert.equal(result.details.scope, "pull request 19");
     assert.match(result.details.links.hotspot ?? "", /hotspots=HOTSPOT-1/);
     assert.equal(result.details.requests.sourceAttempts.length, 1);
@@ -166,6 +178,25 @@ test("executes analyseme_get_security_hotspot with source, flow, and Sonar secur
     assert.doesNotMatch(serializedDetails, /hotspot-secret-token/);
   } finally {
     restoreEnv(envSnapshot);
+    globalThis.fetch = fetchSnapshot;
+    await removeTempDir(cwd);
+  }
+});
+
+test("analyseme_get_security_hotspot rejects empty hotspot keys before Sonar requests", async () => {
+  const cwd = await createTempDir();
+  const fetchSnapshot = globalThis.fetch;
+  const routeFetch = new GetHotspotRouteFetch(() => jsonResponse({ errors: [{ msg: "fetch should not run" }] }, 500));
+
+  try {
+    globalThis.fetch = routeFetch.fetch.bind(routeFetch);
+
+    await assert.rejects(
+      executeGetSecurityHotspotTool("call-get-hotspot-empty", { hotspotKey: "   " }, undefined, undefined, { cwd }),
+      /hotspotKey is required and must be a non-empty string/,
+    );
+    assert.equal(routeFetch.calls.length, 0);
+  } finally {
     globalThis.fetch = fetchSnapshot;
     await removeTempDir(cwd);
   }
@@ -187,6 +218,30 @@ test("analyseme_get_security_hotspot throws when the hotspot is not found", asyn
     await assert.rejects(
       executeGetSecurityHotspotTool("call-get-hotspot", { hotspotKey: "MISSING" }, undefined, undefined, { cwd }),
       /Sonar security hotspot MISSING was not found/,
+    );
+  } finally {
+    restoreEnv(envSnapshot);
+    globalThis.fetch = fetchSnapshot;
+    await removeTempDir(cwd);
+  }
+});
+
+test("analyseme_get_security_hotspot rejects detail responses for a different hotspot key", async () => {
+  const cwd = await createTempDir();
+  const envSnapshot = snapshotEnv();
+  const fetchSnapshot = globalThis.fetch;
+  const routeFetch = new GetHotspotRouteFetch((url) => {
+    if (url.includes("/api/hotspots/show")) return jsonResponse(detailedHotspot({ key: "OTHER-HOTSPOT" }));
+    return jsonResponse({ errors: [{ msg: "unexpected path" }] }, 404);
+  });
+
+  try {
+    applyEnv({ SONARQUBE_URL: "https://sonar.example.com", SONARQUBE_TOKEN: "hotspot-secret-token" });
+    globalThis.fetch = routeFetch.fetch.bind(routeFetch);
+
+    await assert.rejects(
+      executeGetSecurityHotspotTool("call-get-hotspot", { hotspotKey: "HOTSPOT-1" }, undefined, undefined, { cwd }),
+      /Sonar security hotspot HOTSPOT-1 was not found in the hotspot detail response/,
     );
   } finally {
     restoreEnv(envSnapshot);
@@ -232,7 +287,43 @@ test("analyseme_get_security_hotspot reports missing source context and guidance
   }
 });
 
-test("analyseme_get_security_hotspot includes visible truncation metadata for long guidance", async () => {
+test("analyseme_get_security_hotspot preserves abort from optional source context", async () => {
+  const cwd = await createTempDir();
+  const envSnapshot = snapshotEnv();
+  const fetchSnapshot = globalThis.fetch;
+  const controller = new AbortController();
+  const routeFetch = new GetHotspotRouteFetch((url) => {
+    if (url.includes("/api/hotspots/show")) return jsonResponse(detailedHotspot());
+    if (url.includes("/api/sources/show")) {
+      controller.abort();
+      throw abortError();
+    }
+    return jsonResponse({ errors: [{ msg: "unexpected path" }] }, 404);
+  });
+
+  try {
+    applyEnv({ SONARQUBE_URL: "https://sonar.example.com", SONARQUBE_TOKEN: "hotspot-secret-token" });
+    globalThis.fetch = routeFetch.fetch.bind(routeFetch);
+
+    await assert.rejects(
+      executeGetSecurityHotspotTool(
+        "call-get-hotspot-abort-source",
+        { hotspotKey: "HOTSPOT-1" },
+        controller.signal,
+        undefined,
+        { cwd },
+      ),
+      (error) => error instanceof Error && error.name === "AbortError",
+    );
+    assert.equal(routeFetch.calls.filter((call) => call.url.includes("/api/sources/show")).length, 1);
+  } finally {
+    restoreEnv(envSnapshot);
+    globalThis.fetch = fetchSnapshot;
+    await removeTempDir(cwd);
+  }
+});
+
+test("analyseme_get_security_hotspot includes visible field truncation metadata for long guidance", async () => {
   const cwd = await createTempDir();
   const envSnapshot = snapshotEnv();
   const fetchSnapshot = globalThis.fetch;
@@ -258,9 +349,10 @@ test("analyseme_get_security_hotspot includes visible truncation metadata for lo
       { cwd },
     );
 
-    assert.equal(result.details.truncated, true);
-    assert.equal(result.details.truncation.truncated, true);
-    assert.match(result.content[0].text, /AnalyseMe output truncated/);
+    assert.ok(result.details.textSafety.truncatedFields > 0);
+    assert.match(result.content[0].text, /AnalyseMe field truncated/);
+    assert.match(result.details.hotspot.guidance.riskDescription ?? "", /AnalyseMe field truncated/);
+    assert.ok((result.details.hotspot.guidance.riskDescription ?? "").length <= 8_000);
   } finally {
     restoreEnv(envSnapshot);
     globalThis.fetch = fetchSnapshot;

@@ -17,6 +17,7 @@ const envKeys = [
   "SONARQUBE_PROJECT_KEY",
   "SONARQUBE_BRANCH",
   "SONARQUBE_PULL_REQUEST",
+  "SONARQUBE_ALLOW_INSECURE_HTTP",
 ];
 
 class HotspotRouteFetch {
@@ -131,7 +132,7 @@ test("executes analyseme_list_security_hotspots with branch scope and pagination
 
     const result = await executeListSecurityHotspotsTool(
       "call-hotspots",
-      { projectKey: "demo", organization: "arg-org", branch: "feature/a", page: 3, limit: 4 },
+      { projectKey: " demo ", organization: " arg-org ", branch: " feature/a ", page: 3, limit: 4 },
       undefined,
       undefined,
       { cwd },
@@ -164,6 +165,53 @@ test("executes analyseme_list_security_hotspots with branch scope and pagination
     assert.match(routeFetch.calls[0].url, /branch=feature%2Fa/);
     assert.match(routeFetch.calls[0].url, /organization=arg-org/);
     assert.doesNotMatch(serializedDetails, /hotspot-secret-token/);
+  } finally {
+    restoreEnv(envSnapshot);
+    globalThis.fetch = fetchSnapshot;
+    await removeTempDir(cwd);
+  }
+});
+
+test("analyseme_list_security_hotspots reports malformed rows without rendering placeholder keys", async () => {
+  const cwd = await createTempDir();
+  const envSnapshot = snapshotEnv();
+  const fetchSnapshot = globalThis.fetch;
+  const response = createHotspotResponse(
+    [
+      { message: "Missing hotspot key", status: "TO_REVIEW" },
+      reviewHotspot("HOTSPOT-1"),
+      reviewHotspot("REVIEWED", { status: "REVIEWED" }),
+    ],
+    1,
+    3,
+    3,
+  );
+  const routeFetch = new HotspotRouteFetch(response);
+
+  try {
+    applyEnv({ SONARQUBE_URL: "https://sonar.example.com", SONARQUBE_TOKEN: "hotspot-secret-token" });
+    globalThis.fetch = routeFetch.fetch.bind(routeFetch);
+
+    const result = await executeListSecurityHotspotsTool(
+      "call-hotspots-malformed",
+      { projectKey: "demo", limit: 3 },
+      undefined,
+      undefined,
+      { cwd },
+    );
+    const content = result.content[0].text;
+
+    assert.match(content, /HOTSPOT-1/);
+    assert.doesNotMatch(content, /unknown-hotspot/);
+    assert.match(content, /Warnings/);
+    assert.match(content, /Skipped 1 malformed Sonar hotspot row/);
+    assert.equal(result.details.hotspots.length, 1);
+    assert.equal(result.details.pagination.requiringReviewReturned, 1);
+    assert.equal(result.details.pagination.excludedNonReview, 1);
+    assert.equal(result.details.pagination.malformedRowsSkipped, 1);
+    assert.equal(result.details.partialData.malformedRowsSkipped, 1);
+    assert.equal(result.details.partialData.invalidRows[0].reason, "missing non-empty hotspot key");
+    assert.match(result.details.warnings.join("\n"), /malformed Sonar hotspot row/);
   } finally {
     restoreEnv(envSnapshot);
     globalThis.fetch = fetchSnapshot;

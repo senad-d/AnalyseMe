@@ -19,6 +19,8 @@ export const SONAR_ENV_VARS = {
   pullRequest: "SONARQUBE_PULL_REQUEST",
 } as const;
 
+export const SONAR_ALLOW_INSECURE_HTTP_ENV_VAR = "SONARQUBE_ALLOW_INSECURE_HTTP";
+
 export const SONAR_ENV_VAR_NAMES = [
   SONAR_ENV_VARS.url,
   SONAR_ENV_VARS.token,

@@ -1,4 +1,5 @@
 import { SONAR_ENV_VARS, SONAR_PROJECT_PROPERTIES_FILE } from "../constants.ts";
+import { isInsecureSonarHttpUrl } from "../config/load-config.ts";
 import type { AnalyseMeConfigLoadResult, LoadedConfigValues, ProjectKeyResolution } from "../config/types.ts";
 import { maskSecretPresence } from "../utils/mask.ts";
 
@@ -128,9 +129,9 @@ function buildConnectionSection(
     title: "Connection",
     items: [
       {
-        state: result.config ? "ok" : "missing",
+        state: sonarUrlState(result, url),
         label: "Sonar URL",
-        value: url ?? "missing",
+        value: sonarUrlValue(result, url),
       },
       {
         state: token?.value ? "ok" : "missing",
@@ -139,6 +140,20 @@ function buildConnectionSection(
       },
     ],
   };
+}
+
+function sonarUrlState(result: AnalyseMeConfigLoadResult, url: string | undefined): ConfigTuiItemState {
+  if (!result.config) return "missing";
+  if (isInsecureSonarHttpUrl(url)) return "warning";
+
+  return "ok";
+}
+
+function sonarUrlValue(result: AnalyseMeConfigLoadResult, url: string | undefined): string {
+  if (!url) return "missing";
+  if (result.config && isInsecureSonarHttpUrl(url)) return `${url} (non-TLS HTTP allowed)`;
+
+  return url;
 }
 
 function buildProjectSection(
@@ -222,7 +237,7 @@ function analysisScopeState(sources: LoadedConfigValues | undefined): ConfigTuiI
 }
 
 function buildIssues(result: AnalyseMeConfigLoadResult, projectKey: string | undefined): string[] {
-  const issues = result.errors.map(shortIssue);
+  const issues = [...result.errors.map(shortIssue), ...result.warnings];
 
   if (result.config && !projectKey) {
     issues.push(`Set ${SONAR_ENV_VARS.projectKey} or add sonar.projectKey to ${SONAR_PROJECT_PROPERTIES_FILE}.`);
@@ -232,6 +247,7 @@ function buildIssues(result: AnalyseMeConfigLoadResult, projectKey: string | und
 }
 
 function shortIssue(issue: string): string {
+  if (issue.includes("non-TLS HTTP")) return issue;
   if (issue.includes(SONAR_ENV_VARS.url)) return `Set a valid ${SONAR_ENV_VARS.url}.`;
   if (issue.includes(SONAR_ENV_VARS.token)) return `Set ${SONAR_ENV_VARS.token}.`;
   if (issue.includes(SONAR_ENV_VARS.branch) && issue.includes(SONAR_ENV_VARS.pullRequest)) {

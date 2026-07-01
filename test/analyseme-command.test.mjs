@@ -14,6 +14,7 @@ const envKeys = [
   "SONARQUBE_PROJECT_KEY",
   "SONARQUBE_BRANCH",
   "SONARQUBE_PULL_REQUEST",
+  "SONARQUBE_ALLOW_INSECURE_HTTP",
 ];
 
 function snapshotEnv() {
@@ -61,6 +62,7 @@ test("builds /analyseme help text with config, CI, tools, and read-only guidance
   assert.match(help, /GitHub Actions example/);
   assert.match(help, /Project key resolution order/);
   assert.match(help, /Analysis scope resolution order/);
+  assert.match(help, /SONARQUBE_ALLOW_INSECURE_HTTP/);
   assert.match(help, /read-only/);
   assert.match(help, new RegExp(ANALYSEME_TOOL_NAMES.getProjectSummary));
   assert.match(help, new RegExp(ANALYSEME_TOOL_NAMES.listIssues));
@@ -146,6 +148,36 @@ test("/analyseme sends read-only config TUI without network or token disclosure"
   } finally {
     restoreEnv(envSnapshot);
     globalThis.fetch = fetchSnapshot;
+    await removeTempDir(cwd);
+  }
+});
+
+test("/analyseme surfaces explicitly allowed non-TLS HTTP without token disclosure", async () => {
+  const cwd = await createTempDir();
+  const envSnapshot = snapshotEnv();
+  const commands = [];
+  const messages = [];
+  const fakePi = {
+    registerCommand: (name, options) => commands.push({ name, options }),
+    sendMessage: (message, options) => messages.push({ message, options }),
+  };
+
+  try {
+    applyEnv({
+      SONARQUBE_URL: "http://sonar.example.com",
+      SONARQUBE_TOKEN: "command-secret-token",
+      SONARQUBE_ALLOW_INSECURE_HTTP: "true",
+    });
+
+    registerAnalyseMeCommand(fakePi);
+    await commands[0].options.handler("", { mode: "json", hasUI: false, cwd });
+
+    assert.equal(messages.length, 1);
+    assert.match(messages[0].message.content, /non-TLS HTTP allowed/);
+    assert.match(messages[0].message.content, /SONARQUBE_URL uses non-TLS HTTP/);
+    assert.doesNotMatch(messages[0].message.content, /command-secret-token/);
+  } finally {
+    restoreEnv(envSnapshot);
     await removeTempDir(cwd);
   }
 });

@@ -26,6 +26,7 @@ Configuration variables:
 - `SONARQUBE_PROJECT_KEY` — optional default project key; tools may also resolve `sonar.projectKey` from `sonar-project.properties`.
 - `SONARQUBE_BRANCH` — optional branch analysis scope.
 - `SONARQUBE_PULL_REQUEST` — optional pull request analysis scope; mutually exclusive with branch.
+- `SONARQUBE_ALLOW_INSECURE_HTTP` — optional explicit opt-in for local/trusted-development `http://` Sonar URLs only.
 
 AnalyseMe must never print, log, persist, or return the raw token in tool content, tool details, TUI output, errors, tests, or documentation examples. `/analyseme` shows token presence only in masked form.
 
@@ -35,13 +36,13 @@ AnalyseMe must never print, log, persist, or return the raw token in tool conten
 
 ## Network access
 
-Network access is limited to the configured SonarQube/SonarCloud URL. AnalyseMe uses Node `fetch` with abort support and does not shell out to `curl` or other commands for API calls.
+Network access is limited to the configured SonarQube/SonarCloud URL. AnalyseMe rejects non-TLS `http://` Sonar URLs by default; `SONARQUBE_ALLOW_INSECURE_HTTP=true` is required to send tokens over HTTP for local/trusted development endpoints, and `/analyseme` surfaces that warning without printing token values. AnalyseMe uses Node `fetch` with abort support and does not shell out to `curl` or other commands for API calls.
 
 Default tests use mocked `fetch`; live Sonar credentials are not required for validation.
 
 ## Data handling
 
-Sonar issue messages, hotspot messages, file paths, source snippets, and rule metadata may contain project-sensitive information. AnalyseMe returns them only through normal Pi command/tool output and does not persist retrieved Sonar data outside normal Pi session/tool result storage.
+Sonar issue messages, hotspot messages, file paths, source snippets, and rule metadata may contain project-sensitive information. AnalyseMe strips terminal control sequences from Sonar-derived strings and bounds large fields before returning content or structured details. It returns retrieved Sonar data only through normal Pi command/tool output and does not persist it outside normal Pi session/tool result storage.
 
 ## Reporting a vulnerability
 

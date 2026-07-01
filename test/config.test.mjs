@@ -113,6 +113,41 @@ test("reports missing and invalid config without exposing token secrets", async 
   }
 });
 
+test("rejects non-TLS HTTP Sonar URLs unless explicitly allowed", async () => {
+  const cwd = await createTempDir();
+
+  try {
+    const blocked = await loadAnalyseMeConfig({
+      cwd,
+      env: {
+        SONARQUBE_URL: "http://sonar.example.com",
+        SONARQUBE_TOKEN: "super-secret-token",
+      },
+    });
+
+    assert.equal(blocked.config, undefined);
+    assert.match(blocked.errors.join("\n"), /non-TLS HTTP/);
+    assert.doesNotMatch(blocked.errors.join("\n"), /super-secret-token/);
+
+    const allowed = await loadAnalyseMeConfig({
+      cwd,
+      env: {
+        SONARQUBE_URL: " http://sonar.example.com/// ",
+        SONARQUBE_TOKEN: "super-secret-token",
+        SONARQUBE_ALLOW_INSECURE_HTTP: "true",
+      },
+    });
+
+    assert.deepEqual(allowed.errors, []);
+    assert.equal(allowed.config?.url, "http://sonar.example.com");
+    assert.equal(allowed.config?.allowInsecureHttp, true);
+    assert.match(allowed.warnings.join("\n"), /non-TLS HTTP/);
+    assert.doesNotMatch(allowed.warnings.join("\n"), /super-secret-token/);
+  } finally {
+    await removeTempDir(cwd);
+  }
+});
+
 test("parses .env quoting and inline comments", () => {
   const values = parseEnvFileContent(`\n# comment\nexport SONARQUBE_URL="https://sonar.example.com/"\nSONARQUBE_TOKEN='token value'\nSONARQUBE_PROJECT_KEY=project-key # comment\n`);
 

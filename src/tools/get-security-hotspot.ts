@@ -2,19 +2,31 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import { Type } from "typebox";
 
 import { ANALYSEME_TOOL_NAMES } from "../constants.ts";
-import { resolveAnalysisScope } from "../config/analysis-scope.ts";
-import { requireAnalyseMeConfig } from "../config/load-config.ts";
-import { resolveProjectKey } from "../config/project-key.ts";
-import type { AnalysisScopeResolution, SonarConnectionConfig } from "../config/types.ts";
 import { buildHotspotDetailEndpoint, buildSourceShowEndpoint } from "../sonar/endpoints.ts";
 import type { EndpointRequest } from "../sonar/endpoints.ts";
 import { createSonarClient } from "../sonar/client.ts";
 import type { SonarClient } from "../sonar/client.ts";
 import type { AgentSecurityHotspotDetail, AgentSecurityHotspotSummary } from "../sonar/hotspot-mapping.ts";
 import { mapSecurityHotspotDetail } from "../sonar/hotspot-mapping.ts";
-import { redactSecrets } from "../utils/mask.ts";
+import { rethrowIfAbortError } from "../utils/abort.ts";
+import { safeSonarWarningText, summarizeSonarTextSafety } from "../utils/text-safety.ts";
+import type { SonarTextSafetySummary } from "../utils/text-safety.ts";
 import { truncateAnalyseMeText } from "../utils/truncation.ts";
-import { renderAnalysisScope } from "./shared.ts";
+import {
+  asRecord,
+  buildScopeEndpointOptions,
+  buildSonarUiUrl,
+  buildSourceShowEndpointOptions,
+  errorMessage,
+  normalizeProjectScopedToolInput,
+  numberField,
+  renderAnalysisScope,
+  renderLocation,
+  requireNonEmptyToolString,
+  resolveOptionalProjectToolContext,
+  stringField,
+} from "./shared.ts";
+import type { OptionalProjectToolContext } from "./shared.ts";
 
 export interface GetSecurityHotspotToolInput {
   hotspotKey: string;
@@ -43,14 +55,7 @@ export interface GetSecurityHotspotDetails {
   warnings: string[];
   truncation: ReturnType<typeof truncateAnalyseMeText>["metadata"];
   truncated: boolean;
-}
-
-interface OptionalHotspotProjectContext {
-  config: SonarConnectionConfig;
-  projectKey?: string;
-  projectKeySource?: string;
-  organization?: string;
-  scope: AnalysisScopeResolution;
+  textSafety: SonarTextSafetySummary;
 }
 
 interface HotspotSourceReadResult {
@@ -61,7 +66,9 @@ interface HotspotSourceReadResult {
 
 const getSecurityHotspotParameters = Type.Object({
   hotspotKey: Type.String({
-    description: "Sonar security hotspot key/id to retrieve with location context and Sonar-provided guidance.",
+    minLength: 1,
+    description:
+      "Required Sonar security hotspot key/id to retrieve with location context and Sonar-provided guidance. Empty values are rejected.",
   }),
   projectKey: Type.Optional(
     Type.String({
@@ -110,11 +117,17 @@ export async function executeGetSecurityHotspotTool(
   _onUpdate: unknown,
   ctx: ExtensionContext,
 ): Promise<{ content: Array<{ type: "text"; text: string }>; details: GetSecurityHotspotDetails }> {
-  const resolvedContext = await resolveOptionalHotspotProjectContext(ctx, params);
-  const hotspotRequest = buildHotspotDetailEndpoint(buildHotspotEndpointOptions(params.hotspotKey, resolvedContext));
+  const hotspotKey = requireNonEmptyToolString(
+    params.hotspotKey,
+    "hotspotKey",
+    "a Sonar security hotspot key such as HOTSPOT-123",
+  );
+  const normalizedParams = normalizeProjectScopedToolInput(params);
+  const resolvedContext = await resolveOptionalProjectToolContext(ctx, normalizedParams);
+  const hotspotRequest = buildHotspotDetailEndpoint({ hotspotKey, ...buildScopeEndpointOptions(resolvedContext) });
   const client = createSonarClient(resolvedContext.config);
   const hotspotResponse = await client.getJson<unknown>({ ...hotspotRequest, signal });
-  const hotspotPayload = extractHotspotPayload(hotspotResponse, params.hotspotKey);
+  const hotspotPayload = extractHotspotPayload(hotspotResponse, hotspotKey);
   const sourceResult = await readHotspotSourcePayload(
     client,
     hotspotPayload,
@@ -125,13 +138,14 @@ export async function executeGetSecurityHotspotTool(
   const hotspot = mapSecurityHotspotDetail(hotspotPayload, sourceResult.source);
   const links = buildHotspotLinks(resolvedContext.config.url, hotspot, resolvedContext.projectKey);
   const warnings = sourceResult.warnings;
+  const textSafety = summarizeSonarTextSafety({ hotspot, warnings });
   const rendered = renderSecurityHotspotDetail(hotspot, resolvedContext, links, warnings);
   const truncated = truncateAnalyseMeText(rendered);
 
   return {
     content: [{ type: "text", text: truncated.text }],
     details: {
-      hotspotKey: params.hotspotKey,
+      hotspotKey,
       projectKey: resolvedContext.projectKey,
       projectKeySource: resolvedContext.projectKeySource,
       organization: resolvedContext.organization,
@@ -145,69 +159,9 @@ export async function executeGetSecurityHotspotTool(
       warnings,
       truncation: truncated.metadata,
       truncated: truncated.metadata.truncated,
+      textSafety,
     },
   };
-}
-
-async function resolveOptionalHotspotProjectContext(
-  ctx: ExtensionContext,
-  params: GetSecurityHotspotToolInput,
-): Promise<OptionalHotspotProjectContext> {
-  const config = await requireAnalyseMeConfig({ cwd: ctx.cwd });
-  const projectKeyResolution = await resolveProjectKey({
-    cwd: ctx.cwd,
-    explicitProjectKey: params.projectKey,
-    configuredProjectKey: config.projectKey,
-  });
-  const scope = await resolveAnalysisScope({
-    cwd: ctx.cwd,
-    explicitBranch: params.branch,
-    explicitPullRequest: params.pullRequest,
-    configuredBranch: config.branch,
-    configuredPullRequest: config.pullRequest,
-  });
-
-  return {
-    config,
-    projectKey: projectKeyResolution.projectKey,
-    projectKeySource: projectKeyResolution.projectKey ? projectKeyResolution.source : undefined,
-    organization: normalizeOptionalText(params.organization) ?? config.organization,
-    scope,
-  };
-}
-
-function buildHotspotEndpointOptions(
-  hotspotKey: string,
-  context: OptionalHotspotProjectContext,
-): { hotspotKey: string; organization?: string; branch?: string; pullRequest?: string } {
-  if (context.scope.scope.kind === "branch") {
-    return { hotspotKey, organization: context.organization, branch: context.scope.scope.branch };
-  }
-
-  if (context.scope.scope.kind === "pullRequest") {
-    return { hotspotKey, organization: context.organization, pullRequest: context.scope.scope.pullRequest };
-  }
-
-  return { hotspotKey, organization: context.organization };
-}
-
-function buildSourceEndpointOptions(
-  componentKey: string,
-  line: number,
-  context: OptionalHotspotProjectContext,
-): { componentKey: string; from: number; to: number; organization?: string; branch?: string; pullRequest?: string } {
-  const from = Math.max(1, line - 3);
-  const to = line + 3;
-
-  if (context.scope.scope.kind === "branch") {
-    return { componentKey, from, to, organization: context.organization, branch: context.scope.scope.branch };
-  }
-
-  if (context.scope.scope.kind === "pullRequest") {
-    return { componentKey, from, to, organization: context.organization, pullRequest: context.scope.scope.pullRequest };
-  }
-
-  return { componentKey, from, to, organization: context.organization };
 }
 
 function extractHotspotPayload(response: unknown, hotspotKey: string): unknown {
@@ -215,8 +169,10 @@ function extractHotspotPayload(response: unknown, hotspotKey: string): unknown {
   const hotspot = payload.hotspot ?? response;
   const hotspotRecord = asRecord(hotspot);
 
-  if (!stringField(hotspotRecord, "key")) {
-    throw new Error(`Sonar security hotspot ${hotspotKey} was not found.`);
+  const returnedHotspotKey = stringField(hotspotRecord, "key");
+
+  if (returnedHotspotKey !== hotspotKey) {
+    throw new Error(`Sonar security hotspot ${hotspotKey} was not found in the hotspot detail response.`);
   }
 
   return hotspot;
@@ -225,7 +181,7 @@ function extractHotspotPayload(response: unknown, hotspotKey: string): unknown {
 async function readHotspotSourcePayload(
   client: SonarClient,
   hotspotPayload: unknown,
-  context: OptionalHotspotProjectContext,
+  context: OptionalProjectToolContext,
   signal: AbortSignal | undefined,
   token: string,
 ): Promise<HotspotSourceReadResult> {
@@ -237,15 +193,16 @@ async function readHotspotSourcePayload(
     return { requests: [], warnings: ["Source context unavailable because hotspot component or line is missing."] };
   }
 
-  const request = buildSourceShowEndpoint(buildSourceEndpointOptions(component, line, context));
+  const request = buildSourceShowEndpoint(buildSourceShowEndpointOptions(component, line, context));
 
   try {
     const source = await client.getJson<unknown>({ ...request, signal });
     return { source, requests: [request], warnings: [] };
   } catch (error) {
+    rethrowIfAbortError(error, signal);
     return {
       requests: [request],
-      warnings: [`Source context unavailable: ${redactSecrets(errorMessage(error), [token])}`],
+      warnings: [`Source context unavailable: ${safeSonarWarningText(errorMessage(error), [token])}`],
     };
   }
 }
@@ -257,28 +214,14 @@ function buildHotspotLinks(
 ): HotspotLinks {
   return {
     hotspot: projectKey
-      ? buildUrl(baseUrl, "/security_hotspots", { id: projectKey, hotspots: hotspot.key, open: hotspot.key })
+      ? buildSonarUiUrl(baseUrl, "/security_hotspots", { id: projectKey, hotspots: hotspot.key, open: hotspot.key })
       : undefined,
   };
 }
 
-function buildUrl(baseUrl: string, path: string, query: Record<string, string>): string | undefined {
-  try {
-    const url = new URL(path, `${baseUrl}/`);
-
-    for (const [key, value] of Object.entries(query)) {
-      url.searchParams.set(key, value);
-    }
-
-    return url.toString();
-  } catch {
-    return undefined;
-  }
-}
-
 function renderSecurityHotspotDetail(
   hotspot: AgentSecurityHotspotDetail,
-  context: OptionalHotspotProjectContext,
+  context: OptionalProjectToolContext,
   links: HotspotLinks,
   warnings: string[],
 ): string {
@@ -374,50 +317,3 @@ function renderHotspotLocation(hotspot: AgentSecurityHotspotSummary): string {
   return renderLocation(hotspot.location);
 }
 
-function renderLocation(location: AgentSecurityHotspotSummary["location"]): string {
-  const component = location.component ?? "unavailable component";
-  const file = location.file ? ` (${location.file})` : "";
-  const line = location.line ? `:${location.line}` : "";
-  const range = renderTextRange(location.textRange);
-
-  return `${component}${file}${line}${range}`;
-}
-
-function renderTextRange(textRange: AgentSecurityHotspotSummary["location"]["textRange"]): string {
-  if (!textRange) return "";
-
-  const startLine = textRange.startLine ?? "?";
-  const endLine = textRange.endLine ?? startLine;
-  const startOffset = textRange.startOffset ?? "?";
-  const endOffset = textRange.endOffset ?? "?";
-
-  return ` (range ${startLine}:${startOffset}-${endLine}:${endOffset})`;
-}
-
-function normalizeOptionalText(value: string | undefined): string | undefined {
-  if (typeof value !== "string") return undefined;
-
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : undefined;
-}
-
-function asRecord(value: unknown): Record<string, unknown> {
-  if (typeof value === "object" && value !== null) return value as Record<string, unknown>;
-
-  return {};
-}
-
-function stringField(record: Record<string, unknown>, key: string): string | undefined {
-  const value = record[key];
-  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
-}
-
-function numberField(record: Record<string, unknown>, key: string): number | undefined {
-  const value = record[key];
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
-}
-
-function errorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  return String(error);
-}

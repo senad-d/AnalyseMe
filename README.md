@@ -27,6 +27,8 @@ SONARQUBE_URL="https://sonar.example.com"
 SONARQUBE_TOKEN="replace-with-token"
 ```
 
+`SONARQUBE_URL` must use HTTPS by default. For local or otherwise trusted development-only Sonar endpoints that only support `http://`, set `SONARQUBE_ALLOW_INSECURE_HTTP="true"` explicitly; `/analyseme` will show a non-TLS warning and tokens may be exposed on the network.
+
 Optional:
 
 ```bash
@@ -39,6 +41,9 @@ SONARQUBE_PROJECT_KEY="your-project-key"
 # Optional branch or pull request scope; set only one
 SONARQUBE_BRANCH="main"
 SONARQUBE_PULL_REQUEST="123"
+
+# Explicit opt-in only for local/trusted non-TLS HTTP Sonar endpoints
+SONARQUBE_ALLOW_INSECURE_HTTP="true"
 ```
 
 Project key resolution order: explicit tool argument, `SONARQUBE_PROJECT_KEY`, then `sonar-project.properties` `sonar.projectKey`. `.git/config` remote names are diagnostics only and are not used as automatic Sonar keys.

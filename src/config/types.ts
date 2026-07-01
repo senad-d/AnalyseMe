@@ -35,6 +35,7 @@ export interface SonarConnectionConfig {
   pullRequest?: string;
   sources: LoadedConfigValues;
   tokenDisplay: string;
+  allowInsecureHttp: boolean;
 }
 
 export interface AnalyseMeConfigLoadResult {

@@ -1,3 +1,9 @@
+import {
+  SONAR_IDENTIFIER_TEXT_MAX_CHARS,
+  SONAR_MEDIUM_TEXT_MAX_CHARS,
+  safeSonarString,
+} from "../utils/text-safety.ts";
+
 export interface AgentProjectMetric {
   key: string;
   value?: string;
@@ -23,9 +29,9 @@ export function mapProjectSummaryResponse(
   const component = asRecord(measuresPayload.component);
 
   return {
-    projectKey,
-    qualityGateStatus: stringField(projectStatus, "status"),
-    analysisDate: stringField(component, "analysisDate") ?? stringField(component, "date"),
+    projectKey: safeSonarString(projectKey, SONAR_IDENTIFIER_TEXT_MAX_CHARS) ?? "unknown-project",
+    qualityGateStatus: identifierField(projectStatus, "status"),
+    analysisDate: identifierField(component, "analysisDate") ?? identifierField(component, "date"),
     metrics: mapMeasures(component.measures),
     warnings: buildProjectSummaryWarnings(projectStatus, component),
   };
@@ -40,8 +46,8 @@ function mapMeasure(value: unknown): AgentProjectMetric {
   const payload = asRecord(value);
 
   return {
-    key: stringField(payload, "metric") ?? "unknown_metric",
-    value: stringField(payload, "value"),
+    key: identifierField(payload, "metric") ?? "unknown_metric",
+    value: mediumStringField(payload, "value"),
     bestValue: booleanField(payload, "bestValue"),
   };
 }
@@ -64,9 +70,12 @@ function asRecord(value: unknown): Record<string, unknown> {
   return {};
 }
 
-function stringField(record: Record<string, unknown>, key: string): string | undefined {
-  const value = record[key];
-  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
+function identifierField(record: Record<string, unknown>, key: string): string | undefined {
+  return safeSonarString(record[key], SONAR_IDENTIFIER_TEXT_MAX_CHARS);
+}
+
+function mediumStringField(record: Record<string, unknown>, key: string): string | undefined {
+  return safeSonarString(record[key], SONAR_MEDIUM_TEXT_MAX_CHARS);
 }
 
 function booleanField(record: Record<string, unknown>, key: string): boolean | undefined {

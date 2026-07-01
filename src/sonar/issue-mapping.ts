@@ -1,3 +1,11 @@
+import {
+  SONAR_IDENTIFIER_TEXT_MAX_CHARS,
+  SONAR_LONG_TEXT_MAX_CHARS,
+  SONAR_MEDIUM_TEXT_MAX_CHARS,
+  safeSonarString,
+  safeSonarText,
+} from "../utils/text-safety.ts";
+
 export interface SonarIssueLocation {
   component?: string;
   file?: string;
@@ -59,6 +67,22 @@ export interface AgentIssueDetail extends AgentIssueSummary {
   flows: SonarIssueLocation[][];
 }
 
+export interface SonarMappingInvalidRow {
+  index: number;
+  reason: string;
+}
+
+export interface IssueSummaryMappingResult {
+  issues: AgentIssueSummary[];
+  invalidRows: SonarMappingInvalidRow[];
+  warnings: string[];
+  rawRowCount: number;
+}
+
+export interface IssueSearchMappingResult extends IssueSummaryMappingResult {
+  missingIssuesArray: boolean;
+}
+
 const NON_ACTIVE_ISSUE_STATUSES = new Set([
   "ACCEPTED",
   "CLOSED",
@@ -104,23 +128,64 @@ export function filterActiveSonarIssues<TIssue extends SonarIssueLike>(issues: T
 }
 
 export function mapIssueSearchResponse(response: unknown): AgentIssueSummary[] {
+  return mapIssueSearchResponseWithDiagnostics(response).issues;
+}
+
+export function mapIssueSearchResponseWithDiagnostics(response: unknown): IssueSearchMappingResult {
   const payload = asRecord(response);
-  const issues = arrayField(payload, "issues");
-  return issues.map(mapIssueSummary);
+  const issues = payload.issues;
+
+  if (!Array.isArray(issues)) {
+    return {
+      issues: [],
+      invalidRows: [],
+      warnings: ["Sonar issue search response did not include an issues array; no issue rows were mapped."],
+      rawRowCount: 0,
+      missingIssuesArray: true,
+    };
+  }
+
+  return {
+    ...mapIssueSummariesWithDiagnostics(issues),
+    missingIssuesArray: false,
+  };
+}
+
+export function mapIssueSummariesWithDiagnostics(issues: unknown[]): IssueSummaryMappingResult {
+  const mappedIssues: AgentIssueSummary[] = [];
+  const invalidRows: SonarMappingInvalidRow[] = [];
+
+  issues.forEach((issue, index) => {
+    const validationError = validateIssueSummaryPayload(issue);
+
+    if (validationError) {
+      invalidRows.push({ index, reason: validationError });
+      return;
+    }
+
+    mappedIssues.push(mapIssueSummary(issue));
+  });
+
+  return {
+    issues: mappedIssues,
+    invalidRows,
+    warnings: buildIssueMappingWarnings(invalidRows),
+    rawRowCount: issues.length,
+  };
 }
 
 export function mapIssueSummary(issue: unknown): AgentIssueSummary {
   const payload = asRecord(issue);
 
   return {
-    key: stringField(payload, "key") ?? "unknown-issue",
-    message: stringField(payload, "message"),
-    severity: stringField(payload, "severity"),
-    type: stringField(payload, "type"),
-    status: stringField(payload, "status"),
-    issueStatus: stringField(payload, "issueStatus"),
-    resolution: stringField(payload, "resolution"),
-    rule: stringField(payload, "rule"),
+    key: requiredIssueKey(payload),
+    message: mediumStringField(payload, "message"),
+    severity: identifierField(payload, "severity"),
+    type: identifierField(payload, "type"),
+    status: identifierField(payload, "status"),
+    issueStatus: identifierField(payload, "issueStatus"),
+    resolution: identifierField(payload, "resolution"),
+    rule: identifierField(payload, "rule"),
     impacts: mapIssueImpacts(payload.impacts),
     location: mapIssueLocation(payload),
     tags: stringArrayField(payload, "tags"),
@@ -133,7 +198,7 @@ export function mapIssueDetail(issue: unknown, rule: unknown = undefined, source
 
   return {
     ...summary,
-    ruleName: stringField(rulePayload, "name"),
+    ruleName: mediumStringField(rulePayload, "name"),
     guidance: extractRuleGuidance(rulePayload),
     ruleMetadata: mapRuleMetadata(rulePayload),
     sourceSnippets: mapSourceSnippets(sourceResponse),
@@ -159,10 +224,10 @@ export function extractRuleGuidance(rule: unknown): string | undefined {
   if (sectionGuidance) return sectionGuidance;
 
   return (
-    stringField(payload, "htmlDesc") ??
-    stringField(payload, "markdownDescription") ??
-    stringField(payload, "description") ??
-    stringField(payload, "mdDesc")
+    longStringField(payload, "htmlDesc") ??
+    longStringField(payload, "markdownDescription") ??
+    longStringField(payload, "description") ??
+    longStringField(payload, "mdDesc")
   );
 }
 
@@ -170,13 +235,35 @@ function mapRuleMetadata(rule: Record<string, unknown>): AgentRuleMetadata | und
   if (Object.keys(rule).length === 0) return undefined;
 
   return {
-    key: stringField(rule, "key"),
-    name: stringField(rule, "name"),
-    severity: stringField(rule, "severity"),
-    type: stringField(rule, "type"),
-    cleanCodeAttribute: stringField(rule, "cleanCodeAttribute"),
+    key: identifierField(rule, "key"),
+    name: mediumStringField(rule, "name"),
+    severity: identifierField(rule, "severity"),
+    type: identifierField(rule, "type"),
+    cleanCodeAttribute: identifierField(rule, "cleanCodeAttribute"),
     tags: stringArrayField(rule, "tags"),
   };
+}
+
+function validateIssueSummaryPayload(issue: unknown): string | undefined {
+  const payload = asRecord(issue);
+  if (!identifierField(payload, "key")) return "missing non-empty issue key";
+
+  return undefined;
+}
+
+function requiredIssueKey(payload: Record<string, unknown>): string {
+  const key = identifierField(payload, "key");
+  if (key) return key;
+
+  throw new Error("Malformed Sonar issue payload: missing non-empty issue key.");
+}
+
+function buildIssueMappingWarnings(invalidRows: SonarMappingInvalidRow[]): string[] {
+  if (invalidRows.length === 0) return [];
+
+  return [
+    `Skipped ${invalidRows.length} malformed Sonar issue row(s) because each issue must include a non-empty key for follow-up detail calls.`,
+  ];
 }
 
 function mapIssueImpacts(value: unknown): string[] {
@@ -185,8 +272,8 @@ function mapIssueImpacts(value: unknown): string[] {
 
   for (const impact of impacts) {
     const payload = asRecord(impact);
-    const softwareQuality = stringField(payload, "softwareQuality");
-    const severity = stringField(payload, "severity");
+    const softwareQuality = identifierField(payload, "softwareQuality");
+    const severity = identifierField(payload, "severity");
 
     if (softwareQuality && severity) mappedImpacts.push(`${softwareQuality}:${severity}`);
     if (!softwareQuality && severity) mappedImpacts.push(severity);
@@ -196,7 +283,7 @@ function mapIssueImpacts(value: unknown): string[] {
 }
 
 function mapIssueLocation(payload: Record<string, unknown>): SonarIssueLocation {
-  const component = stringField(payload, "component");
+  const component = mediumStringField(payload, "component");
   const textRange = mapTextRange(payload.textRange);
 
   return {
@@ -211,7 +298,7 @@ function mapLocationPayload(value: unknown): SonarIssueLocation {
   const payload = asRecord(value);
   const nestedTextRange = asRecord(payload.textRange);
   const textRange = mapTextRange(payload.textRange);
-  const component = stringField(payload, "component");
+  const component = mediumStringField(payload, "component");
 
   return {
     component,
@@ -254,10 +341,10 @@ function mapIssueFlows(issue: unknown): SonarIssueLocation[][] {
 function mapSourceSnippetGroup(value: unknown): AgentSourceSnippet[] {
   const payload = asRecord(value);
   const sources = arrayField(payload, "sources");
-  const component = stringField(payload, "component");
+  const component = mediumStringField(payload, "component");
 
   if (sources.length === 0) {
-    const text = stringField(payload, "code") ?? stringField(payload, "text");
+    const text = sourceStringField(payload, "code") ?? sourceStringField(payload, "text");
     if (!text) return [];
 
     return [{ component, line: numberField(payload, "line"), text }];
@@ -274,9 +361,9 @@ function mapSourceLine(value: unknown, inheritedComponent: string | undefined): 
   const payload = asRecord(value);
 
   return {
-    component: stringField(payload, "component") ?? inheritedComponent,
+    component: mediumStringField(payload, "component") ?? inheritedComponent,
     line: numberField(payload, "line"),
-    text: stringField(payload, "code") ?? stringField(payload, "text") ?? "",
+    text: sourceStringField(payload, "code") ?? sourceStringField(payload, "text") ?? "",
   };
 }
 
@@ -286,14 +373,14 @@ function extractDescriptionSections(rule: Record<string, unknown>): string | und
 
   for (const section of sections) {
     const payload = asRecord(section);
-    const key = stringField(payload, "key");
-    const content = stringField(payload, "content");
+    const key = identifierField(payload, "key");
+    const content = longStringField(payload, "content");
 
     if (content && key) renderedSections.push(`${key}: ${content}`);
     if (content && !key) renderedSections.push(content);
   }
 
-  return renderedSections.length > 0 ? renderedSections.join("\n\n") : undefined;
+  return renderedSections.length > 0 ? safeSonarText(renderedSections.join("\n\n"), SONAR_LONG_TEXT_MAX_CHARS).text : undefined;
 }
 
 function isNonActiveIssueStatus(status: string | undefined): boolean {
@@ -335,15 +422,27 @@ function stringArrayField(record: Record<string, unknown>, key: string): string[
   const strings: string[] = [];
 
   for (const value of values) {
-    if (typeof value === "string") strings.push(value);
+    const safeValue = safeSonarString(value, SONAR_IDENTIFIER_TEXT_MAX_CHARS);
+    if (safeValue) strings.push(safeValue);
   }
 
   return strings;
 }
 
-function stringField(record: Record<string, unknown>, key: string): string | undefined {
-  const value = record[key];
-  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
+function identifierField(record: Record<string, unknown>, key: string): string | undefined {
+  return safeSonarString(record[key], SONAR_IDENTIFIER_TEXT_MAX_CHARS);
+}
+
+function mediumStringField(record: Record<string, unknown>, key: string): string | undefined {
+  return safeSonarString(record[key], SONAR_MEDIUM_TEXT_MAX_CHARS);
+}
+
+function longStringField(record: Record<string, unknown>, key: string): string | undefined {
+  return safeSonarString(record[key], SONAR_LONG_TEXT_MAX_CHARS);
+}
+
+function sourceStringField(record: Record<string, unknown>, key: string): string | undefined {
+  return safeSonarString(record[key], SONAR_MEDIUM_TEXT_MAX_CHARS);
 }
 
 function numberField(record: Record<string, unknown>, key: string): number | undefined {

@@ -42,12 +42,12 @@
 | Resource | none | No skills/prompts/themes planned | Specs/docs only |
 
 ## 5. Architecture
-- Planned files:
+- Runtime files:
   - `src/extension.ts` — small entry point only.
-  - `src/constants.ts` — names, status key, env var names.
+  - `src/constants.ts` — names, status key, command/tool names, and env var names.
   - `src/config/` — read env, local `.env`, `sonar-project.properties`, and branch/PR scope.
   - `src/sonar/` — Sonar API client and response shaping.
-  - `src/tools/` — one file per AnalyseMe tool.
+  - `src/tools/` — one file per AnalyseMe tool plus shared tool helpers.
   - `src/commands/` — `/analyseme` command and help.
   - `src/ui/` — read-only config TUI design helpers.
   - `src/utils/` — truncation, masking, formatting helpers.
@@ -73,7 +73,7 @@
 - Cleanup behavior: clear AnalyseMe status on `session_shutdown`.
 
 ## 7. Security and privacy
-- Shell execution: none planned.
+- Shell execution: none for Sonar HTTP requests.
 - File access/mutation: read `.env` only if present; no file writes.
 - Network access: read-only HTTP requests to configured SonarQube/SonarCloud endpoint.
 - Credentials/secrets: token never returned in tool output; TUI masks token presence/value.
@@ -81,19 +81,19 @@
 - User confirmations: not needed for read-only tools; TUI explicitly says no writes.
 
 ## 8. Documentation and packaging
-- README changes: replace template with AnalyseMe setup, local `.env`, GitHub Actions examples, planned tools.
-- SECURITY changes: document Sonar token handling, network behavior, no telemetry, no Sonar writes.
-- CHANGELOG changes: mark prepared project and pending implementation.
+- README documents AnalyseMe setup, local `.env`, GitHub Actions examples, implemented commands/tools, troubleshooting, and validation.
+- SECURITY documents Sonar token handling, network behavior, no telemetry, no Sonar writes, and safe text handling.
+- CHANGELOG records prepared-project history and implemented runtime behavior.
 - package.json changes:
   - Rename to `@senad-d/pi-analyseme`.
   - Update description/repository/bugs/homepage/keywords.
   - Keep `pi.extensions: ["./src/extension.ts"]`.
-  - Add runtime dependency only if needed for config loading in implementation.
+  - Keep runtime dependencies minimal; config loading currently uses tested local parsing.
 - npm/git distribution plan: npm package and GitHub repo at `senad-d/pi-analyseme`.
 
 ## 9. Validation plan
 - Typecheck: `npm run typecheck`
-- Tests: preparation-level tests for metadata/spec presence now; feature tests later.
+- Tests: metadata/spec presence, config, command/TUI, Sonar mapping/client, and tool behavior tests.
 - Package dry-run: `npm run check:pack`
 - Full validation after prep: `npm install`, then `npm run validate`
 - Isolated Pi smoke test: `pi --no-extensions -e .`
@@ -111,4 +111,4 @@
   - Tools are read-only.
   - Fix guidance comes only from Sonar rule metadata/API.
   - Active issues exclude ignored, false positive, accepted/resolved-like results.
-  - Security hotspots are separate from issues and must have dedicated planned tools.
+  - Security hotspots are separate from issues and use dedicated read-only tools.
