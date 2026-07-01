@@ -241,12 +241,16 @@ function renderSecurityHotspotDetail(
 
   if (links.hotspot) lines.push(`- Hotspot link: ${links.hotspot}`);
 
-  lines.push("", "## Where is the hotspot?");
-  lines.push(...renderSourceSnippets(hotspot));
-  lines.push(...renderSecondaryLocations(hotspot));
-  lines.push(...renderFlows(hotspot));
-  lines.push("", "## Sonar-provided security guidance");
-  lines.push(...renderSecurityGuidance(hotspot));
+  lines.push(
+    "",
+    "## Where is the hotspot?",
+    ...renderSourceSnippets(hotspot),
+    ...renderSecondaryLocations(hotspot),
+    ...renderFlows(hotspot),
+    "",
+    "## Sonar-provided security guidance",
+    ...renderSecurityGuidance(hotspot),
+  );
 
   if (warnings.length > 0) {
     lines.push("", "## Warnings");

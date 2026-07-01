@@ -7,7 +7,9 @@ export class DynamicBorder {
     this.color = color;
   }
 
-  invalidate() {}
+  invalidate() {
+    // Development shim has no retained render cache to invalidate.
+  }
 
   render(width) {
     return [this.color("─".repeat(Math.max(1, width)))];
