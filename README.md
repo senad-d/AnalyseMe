@@ -6,6 +6,7 @@
   <a href="https://pi.dev"><img alt="pi package" src="https://img.shields.io/badge/pi-package-6f42c1?style=flat-square" /></a>
   <a href="https://www.npmjs.com/package/@senad-d/pi-analyseme"><img alt="npm" src="https://img.shields.io/npm/v/%40senad-d%2Fpi-analyseme?style=flat-square" /></a>
   <a href="LICENSE"><img alt="license" src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" /></a>
+  <a href="https://sonarcloud.io/summary/new_code?id=senad-d_AnalyseMe"><img alt="Quality Gate Status" src="https://sonarcloud.io/api/project_badges/measure?project=senad-d_AnalyseMe&metric=alert_status" /></a>
 </p>
 
 <p align="center">
