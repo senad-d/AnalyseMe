@@ -59,9 +59,9 @@
     "typebox": "*"
   },
   "devDependencies": {
-    "@earendil-works/pi-coding-agent": "^0.79.8",
+    "@earendil-works/pi-coding-agent": "^0.80.3",
     "@eslint/js": "^10.0.1",
-    "@types/node": "^25.9.3",
+    "@types/node": "^26.1.0",
     "eslint": "^10.6.0",
     "globals": "^17.7.0",
     "typebox": "^1.2.18",
