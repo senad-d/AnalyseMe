@@ -1,0 +1,69 @@
+{
+  "name": "@senad-d/pi-analyseme",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Read-only SonarQube and SonarCloud analysis tools for Pi agents.",
+  "license": "MIT",
+  "author": "Senad Dizdarević <112484166+senad-d@users.noreply.github.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/senad-d/pi-analyseme.git"
+  },
+  "bugs": {
+    "url": "https://github.com/senad-d/pi-analyseme/issues"
+  },
+  "homepage": "https://github.com/senad-d/pi-analyseme#readme",
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "pi-coding-agent",
+    "sonarqube",
+    "sonarcloud",
+    "static-analysis",
+    "code-quality",
+    "typescript"
+  ],
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "files": [
+    "README.md",
+    "LICENSE",
+    "SECURITY.md",
+    "CHANGELOG.md",
+    "docs/**/*.md",
+    "src/**/*.ts",
+    "tsconfig.json"
+  ],
+  "scripts": {
+    "dev": "pi --no-extensions -e .",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint . --ext .js,.mjs,.ts",
+    "format:check": "node scripts/check-format.mjs",
+    "test": "node --test test/*.test.mjs",
+    "check": "node --check scripts/check-package-contents.mjs",
+    "pack:dry-run": "npm pack --dry-run --json",
+    "check:pack": "node scripts/check-package-contents.mjs",
+    "validate": "npm run typecheck && npm run lint && npm run test && npm run check && npm run check:pack",
+    "lint:fix": "npm run lint -- --fix"
+  },
+  "pi": {
+    "extensions": [
+      "./src/extension.ts"
+    ]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "typebox": "*"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "^0.79.8",
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^25.9.3",
+    "eslint": "^10.6.0",
+    "globals": "^17.7.0",
+    "typebox": "^1.2.18",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.62.1"
+  }
+}
