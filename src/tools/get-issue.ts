@@ -321,12 +321,16 @@ function renderIssueDetail(
   if (links.issue) lines.push(`- Issue link: ${links.issue}`);
   if (links.rule) lines.push(`- Rule link: ${links.rule}`);
 
-  lines.push("", "## Where is the issue?");
-  lines.push(...renderSourceSnippets(issue));
-  lines.push(...renderSecondaryLocations(issue));
-  lines.push(...renderFlows(issue));
-  lines.push("", "## Sonar-provided rule guidance");
-  lines.push(issue.guidance ?? "Sonar did not return rule guidance for this issue.");
+  lines.push(
+    "",
+    "## Where is the issue?",
+    ...renderSourceSnippets(issue),
+    ...renderSecondaryLocations(issue),
+    ...renderFlows(issue),
+    "",
+    "## Sonar-provided rule guidance",
+    issue.guidance ?? "Sonar did not return rule guidance for this issue.",
+  );
 
   if (warnings.length > 0) {
     lines.push("", "## Warnings");

@@ -155,7 +155,7 @@ async function loadOptionalEnvFile(path: string, enabled: boolean, tolerateFileR
     const values = parseEnvFileContent(content);
     return {
       values,
-      result: { path, exists: true, loadedKeys: Object.keys(values).sort() },
+      result: { path, exists: true, loadedKeys: Object.keys(values).sort((left, right) => left.localeCompare(right, "en")) },
     };
   } catch (error) {
     if (isMissingFileError(error)) {
@@ -267,7 +267,7 @@ function parseEnvLine(line: string): { key: string; value: string } | undefined 
   if (equalsIndex === -1) return undefined;
 
   const key = withoutExport.slice(0, equalsIndex).trim();
-  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) return undefined;
+  if (!/^[A-Za-z_]\w*$/.test(key)) return undefined;
 
   const rawValue = withoutExport.slice(equalsIndex + 1).trim();
   return { key, value: decodeEnvValue(rawValue) };
@@ -287,10 +287,10 @@ function decodeEnvValue(value: string): string {
 
 function decodeDoubleQuotedValue(value: string): string {
   return value
-    .replaceAll("\\n", "\n")
-    .replaceAll("\\r", "\r")
-    .replaceAll("\\t", "\t")
-    .replaceAll('\\"', '"')
+    .replaceAll(String.raw`\n`, "\n")
+    .replaceAll(String.raw`\r`, "\r")
+    .replaceAll(String.raw`\t`, "\t")
+    .replaceAll(String.raw`\"`, '"')
     .replaceAll("\\\\", "\\");
 }
 

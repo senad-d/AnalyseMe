@@ -84,7 +84,8 @@ export function buildSonarApiUrl(
 }
 
 export function createSonarAuthorizationHeader(token: string): string {
-  return `Basic ${Buffer.from(`${token}:`, "utf8").toString("base64")}`;
+  const credentials = `${token}:`;
+  return `Basic ${Buffer.from(credentials, "utf8").toString("base64")}`;
 }
 
 function normalizeRequestPath(path: string): string {

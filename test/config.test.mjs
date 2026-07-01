@@ -175,11 +175,22 @@ test("keeps config loading strict by default but can capture unreadable .env war
 });
 
 test("parses .env quoting and inline comments", () => {
-  const values = parseEnvFileContent(`\n# comment\nexport SONARQUBE_URL="https://sonar.example.com/"\nSONARQUBE_TOKEN='token value'\nSONARQUBE_PROJECT_KEY=project-key # comment\n`);
+  const values = parseEnvFileContent(String.raw`
+# comment
+export SONARQUBE_URL="https://sonar.example.com/"
+SONARQUBE_TOKEN='token value'
+SONARQUBE_PROJECT_KEY=project-key # comment
+SONARQUBE_ORGANIZATION="first\rsecond"
+SONARQUBE_BRANCH="first\tsecond"
+SONARQUBE_PULL_REQUEST="first\"second"
+`);
 
   assert.equal(values.SONARQUBE_URL, "https://sonar.example.com/");
   assert.equal(values.SONARQUBE_TOKEN, "token value");
   assert.equal(values.SONARQUBE_PROJECT_KEY, "project-key");
+  assert.equal(values.SONARQUBE_ORGANIZATION, "first\rsecond");
+  assert.equal(values.SONARQUBE_BRANCH, "first\tsecond");
+  assert.equal(values.SONARQUBE_PULL_REQUEST, `first"second`);
 });
 
 test("resolves project key from explicit argument, env config, and sonar-project.properties", async () => {

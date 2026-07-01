@@ -234,7 +234,7 @@ function buildActionCategory(issues: string[]): ConfigTuiCategory {
   return {
     title: "What to fix",
     description: "Local setup issues and warnings detected before any Sonar network call.",
-    settings: issues.map(actionSetting),
+    settings: issues.map((issue, index) => actionSetting(issue, index)),
   };
 }
 
@@ -369,13 +369,15 @@ function renderWide(model: ConfigTuiModel, width: number, state: ResolvedConfigT
   const bodyHeight = Math.max(categoryRows.length, settingRows.length, 8);
   const lines = [topBorder(model.title, model.scope, width)];
 
-  lines.push(fullLine(model.sourceLine, width));
-  lines.push(fullLine(HELP_TEXT, width));
-  lines.push(wideSeparator(leftPaneWidth, rightPaneWidth, "top"));
-  lines.push(...renderWideBodyRows(categoryRows, settingRows, bodyHeight));
-  lines.push(wideSeparator(leftPaneWidth, rightPaneWidth, "bottom"));
-  lines.push(fullLine(footerText(model, state), width));
-  lines.push(bottomBorder(width));
+  lines.push(
+    fullLine(model.sourceLine, width),
+    fullLine(HELP_TEXT, width),
+    wideSeparator(leftPaneWidth, rightPaneWidth, "top"),
+    ...renderWideBodyRows(categoryRows, settingRows, bodyHeight),
+    wideSeparator(leftPaneWidth, rightPaneWidth, "bottom"),
+    fullLine(footerText(model, state), width),
+    bottomBorder(width),
+  );
 
   return fitLines(lines, width);
 }
@@ -384,13 +386,15 @@ function renderNarrow(model: ConfigTuiModel, width: number, state: ResolvedConfi
   const rows = renderSettingsPaneRows(selectedCategory(model, state), state, width - 2);
   const lines = [topBorder(model.title, model.scope, width)];
 
-  lines.push(fullLine(model.sourceLine, width));
-  lines.push(fullLine(HELP_TEXT, width));
-  lines.push(narrowSeparator(width));
-  lines.push(...rows.map((row) => fullLine(row, width)));
-  lines.push(narrowSeparator(width));
-  lines.push(fullLine(footerText(model, state), width));
-  lines.push(bottomBorder(width));
+  lines.push(
+    fullLine(model.sourceLine, width),
+    fullLine(HELP_TEXT, width),
+    narrowSeparator(width),
+    ...rows.map((row) => fullLine(row, width)),
+    narrowSeparator(width),
+    fullLine(footerText(model, state), width),
+    bottomBorder(width),
+  );
 
   return fitLines(lines, width);
 }

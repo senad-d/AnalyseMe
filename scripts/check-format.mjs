@@ -49,7 +49,7 @@ async function checkFile(path) {
 
   const lines = text.split("\n");
   lines.forEach((line, index) => {
-    if (/[ \t]+$/.test(line)) failures.push(`line ${index + 1} has trailing whitespace`);
+    if (line.endsWith(" ") || line.endsWith("\t")) failures.push(`line ${index + 1} has trailing whitespace`);
   });
 
   if (extensionOf(path) === ".json") {

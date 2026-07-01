@@ -23,14 +23,17 @@ export const SONAR_WARNING_TEXT_MAX_CHARS = 2_000;
 export const SONAR_FIELD_TRUNCATION_NOTICE = "[AnalyseMe field truncated";
 
 /* eslint-disable no-control-regex */
-const ANSI_ESCAPE_SEQUENCE_PATTERN = new RegExp(
-  "\\u001B(?:\\[[0-?]*[ -/]*[@-~]|\\][\\s\\S]*?(?:\\u0007|\\u001B\\\\)|[PX^_][\\s\\S]*?\\u001B\\\\|[@-Z\\\\-_])|\\u009B[0-?]*[ -/]*[@-~]",
-  "g",
-);
+const ANSI_ESCAPE_SEQUENCE_PATTERNS = [
+  /\u001B\[[0-?]*[ -/]*[@-~]/g,
+  /\u001B\][\s\S]*?(?:\u0007|\u001B\\)/g,
+  /\u001B[PX^_][\s\S]*?\u001B\\/g,
+  /\u001B[@-Z\\-_]/g,
+  /\u009B[0-?]*[ -/]*[@-~]/g,
+];
 /* eslint-enable no-control-regex */
 
 export function sanitizeSonarText(value: string): string {
-  const withoutAnsi = value.replace(ANSI_ESCAPE_SEQUENCE_PATTERN, "");
+  const withoutAnsi = removeAnsiEscapeSequences(value);
   const normalizedLineEndings = withoutAnsi.replace(/\r\n?/g, "\n");
   let sanitized = "";
 
@@ -40,6 +43,16 @@ export function sanitizeSonarText(value: string): string {
   }
 
   return sanitized;
+}
+
+function removeAnsiEscapeSequences(value: string): string {
+  let text = value;
+
+  for (const pattern of ANSI_ESCAPE_SEQUENCE_PATTERNS) {
+    text = text.replace(pattern, "");
+  }
+
+  return text;
 }
 
 export function safeSonarText(value: string, maxChars: number = SONAR_MEDIUM_TEXT_MAX_CHARS): SonarTextSafetyResult {
