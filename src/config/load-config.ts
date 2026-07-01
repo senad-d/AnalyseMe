@@ -8,6 +8,7 @@ import {
   SONAR_ENV_VARS,
 } from "../constants.ts";
 import { maskSecretPresence } from "../utils/mask.ts";
+import { isMissingFileError, localFileReadWarning } from "./file-errors.ts";
 import type {
   AnalyseMeConfigLoadOptions,
   AnalyseMeConfigLoadResult,
@@ -40,10 +41,14 @@ export async function loadAnalyseMeConfig(
   const cwd = options.cwd ?? process.cwd();
   const env = options.env ?? process.env;
   const envFilePath = options.envFilePath ?? join(cwd, DEFAULT_ENV_FILE_NAME);
-  const parsedEnvFile = await loadOptionalEnvFile(envFilePath, options.readEnvFile ?? true);
+  const parsedEnvFile = await loadOptionalEnvFile(
+    envFilePath,
+    options.readEnvFile ?? true,
+    options.tolerateFileReadErrors ?? false,
+  );
   const sources = collectConfigValues(env, parsedEnvFile.values);
   const allowInsecureHttp = resolveAllowInsecureHttp(env, parsedEnvFile.values);
-  const warnings: string[] = [];
+  const warnings = parsedEnvFile.result.warning ? [parsedEnvFile.result.warning] : [];
   const errors: string[] = [];
   const urlField = validateRequiredUrl(sources[SONAR_ENV_VARS.url], allowInsecureHttp);
   const tokenField = validateRequiredText(SONAR_ENV_VARS.token, sources[SONAR_ENV_VARS.token]);
@@ -137,7 +142,7 @@ export function parseEnvFileContent(content: string): Record<string, string> {
   return values;
 }
 
-async function loadOptionalEnvFile(path: string, enabled: boolean): Promise<ParsedEnvFile> {
+async function loadOptionalEnvFile(path: string, enabled: boolean, tolerateFileReadErrors: boolean): Promise<ParsedEnvFile> {
   if (!enabled) {
     return {
       values: EMPTY_ENV_FILE_VALUES,
@@ -157,6 +162,18 @@ async function loadOptionalEnvFile(path: string, enabled: boolean): Promise<Pars
       return {
         values: EMPTY_ENV_FILE_VALUES,
         result: { path, exists: false, loadedKeys: [] },
+      };
+    }
+
+    if (tolerateFileReadErrors) {
+      return {
+        values: EMPTY_ENV_FILE_VALUES,
+        result: {
+          path,
+          exists: true,
+          loadedKeys: [],
+          warning: localFileReadWarning("local .env file", path, error),
+        },
       };
     }
 
@@ -299,10 +316,6 @@ function normalizeOptionalText(value: string | undefined): string | undefined {
 
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
-}
-
-function isMissingFileError(error: unknown): boolean {
-  return typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT";
 }
 
 function errorMessage(error: unknown): string {

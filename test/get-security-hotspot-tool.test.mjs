@@ -183,6 +183,47 @@ test("executes analyseme_get_security_hotspot with source, flow, and Sonar secur
   }
 });
 
+test("analyseme_get_security_hotspot falls back to textRange.startLine for source context", async () => {
+  const cwd = await createTempDir();
+  const envSnapshot = snapshotEnv();
+  const fetchSnapshot = globalThis.fetch;
+  const routeFetch = new GetHotspotRouteFetch((url) => {
+    if (url.includes("/api/hotspots/show")) {
+      return jsonResponse(detailedHotspot({ line: undefined, textRange: { startLine: 58, endLine: 58 } }));
+    }
+    if (url.includes("/api/sources/show")) {
+      return jsonResponse({ sources: [{ line: 58, code: "db.executeFromFallback(query);" }] });
+    }
+
+    return jsonResponse({ errors: [{ msg: "unexpected path" }] }, 404);
+  });
+
+  try {
+    applyEnv({ SONARQUBE_URL: "https://sonar.example.com", SONARQUBE_TOKEN: "hotspot-secret-token" });
+    globalThis.fetch = routeFetch.fetch.bind(routeFetch);
+
+    const result = await executeGetSecurityHotspotTool(
+      "call-get-hotspot-text-range",
+      { hotspotKey: "HOTSPOT-1", projectKey: "demo" },
+      undefined,
+      undefined,
+      { cwd },
+    );
+    const sourceShowCall = routeFetch.calls.find((call) => call.url.includes("/api/sources/show"));
+
+    assert.ok(sourceShowCall);
+    assert.match(sourceShowCall.url, /from=55/);
+    assert.match(sourceShowCall.url, /to=61/);
+    assert.match(result.content[0].text, /db\.executeFromFallback/);
+    assert.equal(result.details.requests.sourceAttempts.length, 1);
+    assert.equal(result.details.requests.sourceAttempts[0].path, "/api/sources/show");
+  } finally {
+    restoreEnv(envSnapshot);
+    globalThis.fetch = fetchSnapshot;
+    await removeTempDir(cwd);
+  }
+});
+
 test("analyseme_get_security_hotspot rejects empty hotspot keys before Sonar requests", async () => {
   const cwd = await createTempDir();
   const fetchSnapshot = globalThis.fetch;

@@ -148,6 +148,32 @@ test("rejects non-TLS HTTP Sonar URLs unless explicitly allowed", async () => {
   }
 });
 
+test("keeps config loading strict by default but can capture unreadable .env warnings", async () => {
+  const cwd = await createTempDir();
+
+  try {
+    await mkdir(join(cwd, ".env"));
+
+    await assert.rejects(loadAnalyseMeConfig({ cwd, env: {} }));
+
+    const tolerant = await loadAnalyseMeConfig({
+      cwd,
+      env: {
+        SONARQUBE_URL: "https://sonar.example.com",
+        SONARQUBE_TOKEN: "super-secret-token",
+      },
+      tolerateFileReadErrors: true,
+    });
+
+    assert.equal(tolerant.config?.url, "https://sonar.example.com");
+    assert.match(tolerant.warnings.join("\n"), /Unable to read local \.env file/);
+    assert.match(tolerant.warnings.join("\n"), /readable file, not a directory/);
+    assert.doesNotMatch(tolerant.warnings.join("\n"), /super-secret-token/);
+  } finally {
+    await removeTempDir(cwd);
+  }
+});
+
 test("parses .env quoting and inline comments", () => {
   const values = parseEnvFileContent(`\n# comment\nexport SONARQUBE_URL="https://sonar.example.com/"\nSONARQUBE_TOKEN='token value'\nSONARQUBE_PROJECT_KEY=project-key # comment\n`);
 

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -140,14 +140,79 @@ test("/analyseme sends read-only config TUI without network or token disclosure"
     assert.equal(messages[0].message.details.readOnly, true);
     assert.match(messages[0].message.content, /AnalyseMe/);
     assert.match(messages[0].message.content, /Connection/);
-    assert.match(messages[0].message.content, /API token\s+present/);
-    assert.match(messages[0].message.content, /Project key\s+not configured/);
+    assert.match(messages[0].message.content, /WHAT TO FIX/);
+    assert.match(messages[0].message.content, /Project key\s+missing/);
     assert.doesNotMatch(messages[0].message.content, /command-secret-token/);
     assert.equal(messages[0].options.triggerTurn, false);
     assert.equal(messages[0].options.deliverAs, undefined);
   } finally {
     restoreEnv(envSnapshot);
     globalThis.fetch = fetchSnapshot;
+    await removeTempDir(cwd);
+  }
+});
+
+test("/analyseme renders unreadable .env warnings without crashing or disclosing tokens", async () => {
+  const cwd = await createTempDir();
+  const envSnapshot = snapshotEnv();
+  const commands = [];
+  const messages = [];
+  const fakePi = {
+    registerCommand: (name, options) => commands.push({ name, options }),
+    sendMessage: (message, options) => messages.push({ message, options }),
+  };
+
+  try {
+    await mkdir(join(cwd, ".env"));
+    applyEnv({
+      SONARQUBE_URL: "https://sonar.example.com",
+      SONARQUBE_TOKEN: "command-secret-token",
+      SONARQUBE_PROJECT_KEY: "demo",
+    });
+
+    registerAnalyseMeCommand(fakePi);
+    await commands[0].options.handler("", { mode: "json", hasUI: false, cwd });
+
+    assert.equal(messages.length, 1);
+    assert.match(messages[0].message.content, /.env file\s+review/);
+    assert.match(messages[0].message.content, /Unable to read local/);
+    assert.match(messages[0].message.content, /\.env file/);
+    assert.match(messages[0].message.content, /readable file, not a directory/);
+    assert.doesNotMatch(messages[0].message.content, /command-secret-token/);
+  } finally {
+    restoreEnv(envSnapshot);
+    await removeTempDir(cwd);
+  }
+});
+
+test("/analyseme renders unreadable project diagnostic warnings without crashing", async () => {
+  const cwd = await createTempDir();
+  const envSnapshot = snapshotEnv();
+  const commands = [];
+  const messages = [];
+  const fakePi = {
+    registerCommand: (name, options) => commands.push({ name, options }),
+    sendMessage: (message, options) => messages.push({ message, options }),
+  };
+
+  try {
+    await mkdir(join(cwd, "sonar-project.properties"));
+    applyEnv({
+      SONARQUBE_URL: "https://sonar.example.com",
+      SONARQUBE_TOKEN: "command-secret-token",
+    });
+
+    registerAnalyseMeCommand(fakePi);
+    await commands[0].options.handler("", { mode: "json", hasUI: false, cwd });
+
+    assert.equal(messages.length, 1);
+    assert.match(messages[0].message.content, /Project file\s+review/);
+    assert.match(messages[0].message.content, /Unable to read/);
+    assert.match(messages[0].message.content, /sonar-project\.properties/);
+    assert.match(messages[0].message.content, /Project key\s+missing/);
+    assert.doesNotMatch(messages[0].message.content, /command-secret-token/);
+  } finally {
+    restoreEnv(envSnapshot);
     await removeTempDir(cwd);
   }
 });
@@ -173,7 +238,7 @@ test("/analyseme surfaces explicitly allowed non-TLS HTTP without token disclosu
     await commands[0].options.handler("", { mode: "json", hasUI: false, cwd });
 
     assert.equal(messages.length, 1);
-    assert.match(messages[0].message.content, /non-TLS HTTP allowed/);
+    assert.match(messages[0].message.content, /HTTP warning\s+non-TLS/);
     assert.match(messages[0].message.content, /SONARQUBE_URL uses non-TLS HTTP/);
     assert.doesNotMatch(messages[0].message.content, /command-secret-token/);
   } finally {
@@ -220,7 +285,7 @@ test("/analyseme opens an interactive custom TUI in TUI mode", async () => {
     assert.equal(messages.length, 0);
     assert.ok(component);
     assert.match(component.render(80).join("\n"), /AnalyseMe/);
-    assert.match(component.render(80).join("\n"), /Project key\s+not configured/);
+    assert.match(component.render(80).join("\n"), /Project key\s+missing/);
 
     component.handleInput("q");
     assert.equal(doneCalled, true);

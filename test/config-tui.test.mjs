@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { SONAR_ENV_VAR_NAMES, SONAR_ENV_VARS } from "../src/constants.ts";
-import { buildConfigTuiModel, renderConfigTui } from "../src/ui/config-tui.ts";
+import { ConfigTuiComponent, buildConfigTuiModel, renderConfigTui } from "../src/ui/config-tui.ts";
 
 function createSources() {
   const sources = {};
@@ -20,14 +20,16 @@ function createSources() {
 }
 
 function createResult(overrides = {}) {
+  const sources = createSources();
+
   return {
-    sources: createSources(),
+    sources,
     config: {
       url: "https://sonar.example.com",
       token: "super-secret-token",
       organization: "org",
       projectKey: "my-project",
-      sources: createSources(),
+      sources,
       tokenDisplay: "present",
     },
     errors: [],
@@ -37,37 +39,46 @@ function createResult(overrides = {}) {
   };
 }
 
+function createMissingSources() {
+  const sources = {};
+
+  for (const name of SONAR_ENV_VAR_NAMES) {
+    sources[name] = { value: undefined, source: "missing" };
+  }
+
+  return sources;
+}
+
 function assertLineWidths(lines, width) {
   for (const line of lines) {
     assert.ok(line.length <= width, `line too long (${line.length} > ${width}): ${line}`);
   }
 }
 
-test("renders compact AnalyseMe config status with current project and masked token", () => {
+test("renders wide two-pane AnalyseMe info panel without notes or tab help", () => {
   const model = buildConfigTuiModel(createResult());
   const lines = renderConfigTui(model, 88);
   const text = lines.join("\n");
+  const sonarUrlLine = lines.find((line) => line.includes("Sonar URL")) ?? "";
 
   assertLineWidths(lines, 88);
-  assert.match(lines[0], /^╭/);
-  assert.doesNotMatch(text, /┬|▶/);
-  assert.match(text, /✓ Ready to use/);
-  assert.match(text, /Connection/);
-  assert.match(text, /✓ Sonar URL\s+https:\/\/sonar\.example\.com/);
-  assert.match(text, /✓ API token\s+present/);
-  assert.match(text, /✓ Project key\s+my-project/);
-  assert.match(text, /✓ Organization\s+org/);
-  assert.match(text, /· Analysis scope\s+default project scope/);
+  assert.match(lines[0], /^╭─ AnalyseMe .* Ready ─╮$/);
+  assert.match(text, /read-only status • environment and local \.env may apply/);
+  assert.match(text, /↑↓ section {2}q quit/);
+  assert.doesNotMatch(text, /Tab pane|Enter details|search|Notes/);
+  assert.match(text, /┬/);
+  assert.match(text, /┴/);
+  assert.match(text, /▶ Connection/);
+  assert.match(text, /CONNECTION\s+2 items/);
+  assert.match(sonarUrlLine, /Sonar URL\s+https:\/\/sonar\.example\.com/);
+  assert.doesNotMatch(sonarUrlLine, /▶/);
+  assert.match(text, /API token\s+present/);
+  assert.match(text, /1\/2 • Sonar endpoint and masked API token status/);
   assert.doesNotMatch(text, /super-secret-token/);
 });
 
-test("renders missing configuration and project key in one simple panel", () => {
-  const missingSources = {};
-
-  for (const name of SONAR_ENV_VAR_NAMES) {
-    missingSources[name] = { value: undefined, source: "missing" };
-  }
-
+test("renders missing configuration with a read-only setup warning category", () => {
+  const missingSources = createMissingSources();
   const model = buildConfigTuiModel(
     createResult({
       sources: missingSources,
@@ -79,20 +90,36 @@ test("renders missing configuration and project key in one simple panel", () => 
       envFile: { path: ".env", exists: false, loadedKeys: [] },
     }),
   );
-  const lines = renderConfigTui(model, 80);
-  const text = lines.join("\n");
+  const setupLines = renderConfigTui(model, 80, { categoryIndex: 2 });
+  const setupText = setupLines.join("\n");
 
-  assertLineWidths(lines, 80);
-  assert.match(text, /Needs setup/);
-  assert.match(text, /! Setup incomplete/);
-  assert.match(text, /! Sonar URL\s+missing/);
-  assert.match(text, /! API token\s+not set/);
-  assert.match(text, /! Project key\s+not configured/);
-  assert.match(text, /! Set a valid SONARQUBE_URL/);
-  assert.match(text, /! Set SONARQUBE_TOKEN/);
+  assertLineWidths(setupLines, 80);
+  assert.match(setupText, /Needs setup/);
+  assert.match(setupText, /▶ What to fix/);
+  assert.match(setupText, /WHAT TO FIX\s+2 items/);
+  assert.match(setupText, /SONARQUBE_URL\s+missing/);
+  assert.match(setupText, /SONARQUBE_TOKEN\s+missing/);
+  assert.doesNotMatch(setupText, /▶ SONARQUBE_URL/);
+  assert.match(setupText, /3\/3 • Local setup issues and warnings/);
 });
 
-test("renders tiny AnalyseMe config TUI without borders", () => {
+test("renders narrow one-pane read-only information", () => {
+  const model = buildConfigTuiModel(createResult());
+  const lines = renderConfigTui(model, 50);
+  const text = lines.join("\n");
+
+  assertLineWidths(lines, 50);
+  assert.doesNotMatch(text, /┬|┴/);
+  assert.match(text, /↑↓ section {2}q quit/);
+  assert.doesNotMatch(text, /Tab pane|Enter details|Notes/);
+  assert.match(text, /CONNECTION\s+2 items/);
+  assert.match(text, /Sonar URL\s+.*sonar\.example\.com/);
+  assert.match(text, /API token\s+present/);
+  assert.match(text, /1\/2 • Sonar endpoint and masked API token statu/);
+  assert.doesNotMatch(text, /super-secret-token/);
+});
+
+test("renders tiny AnalyseMe config TUI as a four-line borderless fallback", () => {
   const model = buildConfigTuiModel(createResult({ errors: ["missing config"], config: undefined }));
   const lines = renderConfigTui(model, 20);
 
@@ -101,4 +128,23 @@ test("renders tiny AnalyseMe config TUI without borders", () => {
   assert.doesNotMatch(lines.join("\n"), /[╭╮╰╯│]/);
   assert.match(lines[0], /AnalyseMe/);
   assert.match(lines[1], /Needs setup/);
+  assert.match(lines[2], /Action 1: missing/);
+  assert.match(lines[3], /q quit/);
+});
+
+test("handles section navigation and close keys predictably", () => {
+  const model = buildConfigTuiModel(createResult());
+  let doneCalled = false;
+  const component = new ConfigTuiComponent(model, () => { doneCalled = true; });
+
+  assert.match(component.render(80).join("\n"), /1\/2 • Sonar endpoint/);
+
+  component.handleInput("\t");
+  assert.match(component.render(80).join("\n"), /1\/2 • Sonar endpoint/);
+
+  component.handleInput("\u001b[B");
+  assert.match(component.render(80).join("\n"), /2\/2 • Default project key/);
+
+  component.handleInput("\u001b");
+  assert.equal(doneCalled, true);
 });

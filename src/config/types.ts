@@ -24,6 +24,7 @@ export interface EnvFileLoadResult {
   path: string;
   exists: boolean;
   loadedKeys: string[];
+  warning?: string;
 }
 
 export interface SonarConnectionConfig {
@@ -51,12 +52,14 @@ export interface AnalyseMeConfigLoadOptions {
   env?: NodeJS.ProcessEnv;
   envFilePath?: string;
   readEnvFile?: boolean;
+  tolerateFileReadErrors?: boolean;
 }
 
 export interface ProjectKeyResolutionOptions {
   cwd?: string;
   explicitProjectKey?: string;
   configuredProjectKey?: string;
+  tolerateFileReadErrors?: boolean;
 }
 
 export interface GitRemoteDiagnostic {
@@ -69,12 +72,14 @@ export interface GitDiagnostics {
   configPath: string;
   exists: boolean;
   remotes: GitRemoteDiagnostic[];
+  warnings: string[];
 }
 
 export interface ProjectKeyResolution {
   projectKey?: string;
   source: ProjectKeySource;
   gitDiagnostics: GitDiagnostics;
+  warnings: string[];
 }
 
 export interface AnalysisScopeResolutionOptions {

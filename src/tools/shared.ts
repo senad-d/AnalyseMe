@@ -181,6 +181,13 @@ export function buildSourceWindow(line: number): SourceWindow {
   };
 }
 
+export function primaryLineFromPayload(record: Record<string, unknown>): number | undefined {
+  const line = positiveNumberField(record, "line");
+  if (line) return line;
+
+  return positiveNumberField(asRecord(record.textRange), "startLine");
+}
+
 export function buildSourceShowEndpointOptions(
   componentKey: string,
   line: number,
@@ -241,6 +248,11 @@ export function stringField(record: Record<string, unknown>, key: string): strin
 export function numberField(record: Record<string, unknown>, key: string): number | undefined {
   const value = record[key];
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+export function positiveNumberField(record: Record<string, unknown>, key: string): number | undefined {
+  const value = numberField(record, key);
+  return value && value > 0 ? value : undefined;
 }
 
 export function booleanField(record: Record<string, unknown>, key: string): boolean | undefined {

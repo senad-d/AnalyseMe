@@ -24,7 +24,7 @@ import {
   buildSourceShowEndpointOptions,
   errorMessage,
   normalizeProjectScopedToolInput,
-  numberField,
+  primaryLineFromPayload,
   renderAnalysisScope,
   renderLocation,
   requireNonEmptyToolString,
@@ -263,7 +263,7 @@ async function readSourceShowFallback(
 ): Promise<SourceReadResult> {
   const issue = asRecord(issuePayload);
   const component = stringField(issue, "component");
-  const line = numberField(issue, "line");
+  const line = primaryLineFromPayload(issue);
 
   if (!component || !line) {
     return { requests: [], warnings: ["Source fallback unavailable because issue component or line is missing."] };

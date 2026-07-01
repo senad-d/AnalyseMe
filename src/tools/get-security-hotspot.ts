@@ -19,7 +19,7 @@ import {
   buildSourceShowEndpointOptions,
   errorMessage,
   normalizeProjectScopedToolInput,
-  numberField,
+  primaryLineFromPayload,
   renderAnalysisScope,
   renderLocation,
   requireNonEmptyToolString,
@@ -187,7 +187,7 @@ async function readHotspotSourcePayload(
 ): Promise<HotspotSourceReadResult> {
   const hotspot = asRecord(hotspotPayload);
   const component = stringField(hotspot, "component");
-  const line = numberField(hotspot, "line");
+  const line = primaryLineFromPayload(hotspot);
 
   if (!component || !line) {
     return { requests: [], warnings: ["Source context unavailable because hotspot component or line is missing."] };

@@ -52,13 +52,14 @@ export async function handleAnalyseMeCommand(
     return;
   }
 
-  const configResult = await loadAnalyseMeConfig({ cwd: ctx.cwd });
+  const configResult = await loadAnalyseMeConfig({ cwd: ctx.cwd, tolerateFileReadErrors: true });
   const sources = configResult.config?.sources ?? configResult.sources;
   const projectKey = await resolveProjectKey({
     cwd: ctx.cwd,
     configuredProjectKey: sources?.[SONAR_ENV_VARS.projectKey]?.value,
+    tolerateFileReadErrors: true,
   });
-  const model = buildConfigTuiModel(configResult, { projectKey });
+  const model = buildConfigTuiModel(withStatusWarnings(configResult, projectKey.warnings), { projectKey });
 
   if (ctx.mode === "tui") {
     await showAnalyseMeConfigTui(ctx, model);
@@ -82,6 +83,15 @@ async function showAnalyseMeConfigTui(
   await ctx.ui.custom<void>((_tui, _theme, _keybindings, done) => {
     return new ConfigTuiComponent(model, () => done(undefined));
   });
+}
+
+function withStatusWarnings(
+  result: Awaited<ReturnType<typeof loadAnalyseMeConfig>>,
+  warnings: string[],
+): Awaited<ReturnType<typeof loadAnalyseMeConfig>> {
+  if (warnings.length === 0) return result;
+
+  return { ...result, warnings: [...result.warnings, ...warnings] };
 }
 
 function sendAnalyseMeHelp(

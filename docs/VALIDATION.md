@@ -41,17 +41,28 @@ The package dry-run must not include:
 
 ## Isolated Pi smoke test
 
-Use isolated extension loading so other configured extensions do not interfere:
+Run the offline smoke script from the repository root:
 
 ```bash
-PI_SKIP_VERSION_CHECK=1 PI_TELEMETRY=0 pi --no-extensions -e . --no-session -p "/analyseme help"
+npm run smoke:pi
+```
+
+The script runs Pi with isolated extension loading and a temporary working directory:
+
+```bash
+PI_SKIP_VERSION_CHECK=1 PI_TELEMETRY=0 pi --no-extensions -e <repo-root> --no-session -p "/analyseme help"
+PI_SKIP_VERSION_CHECK=1 PI_TELEMETRY=0 pi --no-extensions -e <repo-root> --no-session -p "/analyseme"
 ```
 
 Expected result:
 
-- Pi loads the local AnalyseMe extension.
-- `/analyseme help` returns setup and tool usage text.
-- No Sonar credentials or network access are required.
+- Pi loads the local AnalyseMe extension without other configured extensions.
+- `/analyseme help` returns setup text and the five public tool names.
+- `/analyseme` returns masked read-only configuration/status output.
+- Placeholder Sonar values are used; no live Sonar credentials or network access are required.
+- The placeholder token is not printed.
+
+Pi does not currently expose a stable non-interactive CLI command for machine-readable tool registry discovery in this validation path. Public surface registration remains guarded by fake-API unit tests for the five `analyseme_*` tools, `/analyseme`, and lifecycle status hooks; the smoke script verifies the isolated Pi load path and command behavior.
 
 For an interactive smoke check, run:
 

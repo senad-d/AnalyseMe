@@ -1,16 +1,33 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
+import { isMissingFileError, localFileReadWarning } from "./file-errors.ts";
 import type { GitDiagnostics, GitRemoteDiagnostic } from "./types.ts";
 
-export async function readGitDiagnostics(cwd: string = process.cwd()): Promise<GitDiagnostics> {
+export interface GitDiagnosticsOptions {
+  tolerateFileReadErrors?: boolean;
+}
+
+export async function readGitDiagnostics(
+  cwd: string = process.cwd(),
+  options: GitDiagnosticsOptions = {},
+): Promise<GitDiagnostics> {
   const configPath = join(cwd, ".git", "config");
 
   try {
     const content = await readFile(configPath, "utf8");
-    return { configPath, exists: true, remotes: parseGitRemotes(content) };
+    return { configPath, exists: true, remotes: parseGitRemotes(content), warnings: [] };
   } catch (error) {
-    if (isMissingFileError(error)) return { configPath, exists: false, remotes: [] };
+    if (isMissingFileError(error)) return { configPath, exists: false, remotes: [], warnings: [] };
+    if (options.tolerateFileReadErrors) {
+      return {
+        configPath,
+        exists: true,
+        remotes: [],
+        warnings: [localFileReadWarning("Git diagnostics file", configPath, error)],
+      };
+    }
+
     throw error;
   }
 }
@@ -80,6 +97,3 @@ function parseGitConfigSetting(line: string): { key?: string; value?: string } {
   };
 }
 
-function isMissingFileError(error: unknown): boolean {
-  return typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT";
-}

@@ -2,8 +2,14 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { SONAR_ENV_VARS, SONAR_PROJECT_PROPERTIES_FILE } from "../constants.ts";
+import { isMissingFileError, localFileReadWarning } from "./file-errors.ts";
 import { readGitDiagnostics } from "./git-diagnostics.ts";
-import type { ProjectKeyResolution, ProjectKeyResolutionOptions } from "./types.ts";
+import type { GitDiagnostics, ProjectKeyResolution, ProjectKeyResolutionOptions } from "./types.ts";
+
+interface ProjectPropertiesKeyReadResult {
+  projectKey?: string;
+  warnings: string[];
+}
 
 export async function resolveProjectKey(
   options: ProjectKeyResolutionOptions = {},
@@ -11,34 +17,31 @@ export async function resolveProjectKey(
   const cwd = options.cwd ?? process.cwd();
   const explicitProjectKey = normalizeProjectKey(options.explicitProjectKey);
   const configuredProjectKey = normalizeProjectKey(options.configuredProjectKey);
-  const gitDiagnostics = await readGitDiagnostics(cwd);
+  const tolerateFileReadErrors = options.tolerateFileReadErrors ?? false;
+  const gitDiagnostics = await readGitDiagnostics(cwd, { tolerateFileReadErrors });
+  const warnings = [...gitDiagnostics.warnings];
 
   if (explicitProjectKey) {
-    return { projectKey: explicitProjectKey, source: "argument", gitDiagnostics };
+    return resolution(explicitProjectKey, "argument", gitDiagnostics, warnings);
   }
 
   if (configuredProjectKey) {
-    return { projectKey: configuredProjectKey, source: SONAR_ENV_VARS.projectKey, gitDiagnostics };
+    return resolution(configuredProjectKey, SONAR_ENV_VARS.projectKey, gitDiagnostics, warnings);
   }
 
-  const propertiesProjectKey = await readSonarProjectPropertiesKey(cwd);
-  if (propertiesProjectKey) {
-    return { projectKey: propertiesProjectKey, source: SONAR_PROJECT_PROPERTIES_FILE, gitDiagnostics };
+  const propertiesResult = await readSonarProjectPropertiesKeyForResolution(cwd, tolerateFileReadErrors);
+  warnings.push(...propertiesResult.warnings);
+
+  if (propertiesResult.projectKey) {
+    return resolution(propertiesResult.projectKey, SONAR_PROJECT_PROPERTIES_FILE, gitDiagnostics, warnings);
   }
 
-  return { source: "missing", gitDiagnostics };
+  return { source: "missing", gitDiagnostics, warnings };
 }
 
 export async function readSonarProjectPropertiesKey(cwd: string = process.cwd()): Promise<string | undefined> {
-  const path = join(cwd, SONAR_PROJECT_PROPERTIES_FILE);
-
-  try {
-    const content = await readFile(path, "utf8");
-    return parseSonarProjectKey(content);
-  } catch (error) {
-    if (isMissingFileError(error)) return undefined;
-    throw error;
-  }
+  const result = await readSonarProjectPropertiesKeyForResolution(cwd, false);
+  return result.projectKey;
 }
 
 export function parseSonarProjectKey(content: string): string | undefined {
@@ -57,6 +60,34 @@ export function parsePropertiesFile(content: string): Record<string, string> {
   }
 
   return values;
+}
+
+async function readSonarProjectPropertiesKeyForResolution(
+  cwd: string,
+  tolerateFileReadErrors: boolean,
+): Promise<ProjectPropertiesKeyReadResult> {
+  const path = join(cwd, SONAR_PROJECT_PROPERTIES_FILE);
+
+  try {
+    const content = await readFile(path, "utf8");
+    return { projectKey: parseSonarProjectKey(content), warnings: [] };
+  } catch (error) {
+    if (isMissingFileError(error)) return { warnings: [] };
+    if (tolerateFileReadErrors) {
+      return { warnings: [localFileReadWarning(SONAR_PROJECT_PROPERTIES_FILE, path, error)] };
+    }
+
+    throw error;
+  }
+}
+
+function resolution(
+  projectKey: string,
+  source: ProjectKeyResolution["source"],
+  gitDiagnostics: GitDiagnostics,
+  warnings: string[],
+): ProjectKeyResolution {
+  return { projectKey, source, gitDiagnostics, warnings };
 }
 
 function parsePropertyLine(line: string): { key: string; value: string } | undefined {
@@ -88,8 +119,4 @@ function normalizeProjectKey(value: string | undefined): string | undefined {
 
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
-}
-
-function isMissingFileError(error: unknown): boolean {
-  return typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT";
 }
