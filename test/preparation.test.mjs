@@ -11,12 +11,14 @@ const skeletonFiles = [
   "../src/config/analysis-scope.ts",
   "../src/config/git-diagnostics.ts",
   "../src/config/types.ts",
+  "../src/events/lifecycle.ts",
   "../src/sonar/client.ts",
   "../src/sonar/endpoints.ts",
   "../src/sonar/issue-mapping.ts",
   "../src/sonar/hotspot-mapping.ts",
   "../src/sonar/project-mapping.ts",
   "../src/tools/project-summary.ts",
+  "../src/tools/shared.ts",
   "../src/tools/list-issues.ts",
   "../src/tools/get-issue.ts",
   "../src/tools/list-security-hotspots.ts",
@@ -25,6 +27,14 @@ const skeletonFiles = [
   "../src/ui/config-tui.ts",
   "../src/utils/truncation.ts",
   "../src/utils/mask.ts",
+];
+
+const documentationFiles = [
+  "../README.md",
+  "../SECURITY.md",
+  "../CHANGELOG.md",
+  "../docs/STRUCTURE.md",
+  "../docs/VALIDATION.md",
 ];
 
 async function readText(path) {
@@ -42,12 +52,24 @@ test("package declares AnalyseMe identity and Pi extension entry file", async ()
 test("extension entry point delegates only to implemented registrations", () => {
   assert.match(extensionSource, /analyseMeExtension/);
   assert.match(extensionSource, /registerProjectSummaryTool\(pi\)/);
+  assert.match(extensionSource, /registerListIssuesTool\(pi\)/);
+  assert.match(extensionSource, /registerGetIssueTool\(pi\)/);
+  assert.match(extensionSource, /registerListSecurityHotspotsTool\(pi\)/);
+  assert.match(extensionSource, /registerGetSecurityHotspotTool\(pi\)/);
+  assert.match(extensionSource, /registerAnalyseMeCommand\(pi\)/);
+  assert.match(extensionSource, /registerAnalyseMeLifecycle\(pi\)/);
   assert.doesNotMatch(extensionSource, /registerExampleCommand|registerExampleTool|template_greet|template-hello/);
   assert.doesNotMatch(extensionSource, /\.registerTool\(|\.registerCommand\(|\.on\(/);
 });
 
 test("runtime skeleton files exist for planned implementation areas", async () => {
   for (const path of skeletonFiles) {
+    await access(new URL(path, import.meta.url));
+  }
+});
+
+test("implementation documentation files exist", async () => {
+  for (const path of documentationFiles) {
     await access(new URL(path, import.meta.url));
   }
 });

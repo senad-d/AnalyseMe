@@ -1,4 +1,5 @@
-import type { SonarIssueLocation } from "./issue-mapping.ts";
+import type { AgentSourceSnippet, SonarIssueLocation } from "./issue-mapping.ts";
+import { mapSourceSnippets } from "./issue-mapping.ts";
 
 export interface SonarSecurityHotspotLike {
   status?: string;
@@ -27,6 +28,7 @@ export interface AgentSecurityHotspotSummary {
 
 export interface AgentSecurityHotspotDetail extends AgentSecurityHotspotSummary {
   guidance: AgentSecurityHotspotGuidance;
+  sourceSnippets: AgentSourceSnippet[];
   secondaryLocations: SonarIssueLocation[];
   flows: SonarIssueLocation[][];
 }
@@ -75,12 +77,13 @@ export function mapSecurityHotspotSummary(hotspot: unknown): AgentSecurityHotspo
   };
 }
 
-export function mapSecurityHotspotDetail(hotspot: unknown): AgentSecurityHotspotDetail {
+export function mapSecurityHotspotDetail(hotspot: unknown, sourceResponse: unknown = undefined): AgentSecurityHotspotDetail {
   const summary = mapSecurityHotspotSummary(hotspot);
 
   return {
     ...summary,
     guidance: extractHotspotGuidance(hotspot),
+    sourceSnippets: mapSourceSnippets(sourceResponse),
     secondaryLocations: mapSecondaryLocations(hotspot),
     flows: mapHotspotFlows(hotspot),
   };

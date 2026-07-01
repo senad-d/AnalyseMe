@@ -1,5 +1,11 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
+import { registerAnalyseMeCommand } from "./commands/analyseme.ts";
+import { registerAnalyseMeLifecycle } from "./events/lifecycle.ts";
+import { registerGetIssueTool } from "./tools/get-issue.ts";
+import { registerGetSecurityHotspotTool } from "./tools/get-security-hotspot.ts";
+import { registerListIssuesTool } from "./tools/list-issues.ts";
+import { registerListSecurityHotspotsTool } from "./tools/list-security-hotspots.ts";
 import { registerProjectSummaryTool } from "./tools/project-summary.ts";
 
 /**
@@ -12,11 +18,13 @@ import { registerProjectSummaryTool } from "./tools/project-summary.ts";
  */
 export default function analyseMeExtension(pi: ExtensionAPI) {
   registerProjectSummaryTool(pi);
+  registerListIssuesTool(pi);
+  registerGetIssueTool(pi);
+  registerListSecurityHotspotsTool(pi);
+  registerGetSecurityHotspotTool(pi);
+  registerAnalyseMeCommand(pi);
+  registerAnalyseMeLifecycle(pi);
 
   // Planned, not registered here yet:
-  // - /analyseme read-only config TUI and /analyseme help
-  // - analyseme_list_issues
-  // - analyseme_get_issue
-  // - analyseme_list_security_hotspots
-  // - analyseme_get_security_hotspot
+  // - /analyseme read-only config TUI
 }

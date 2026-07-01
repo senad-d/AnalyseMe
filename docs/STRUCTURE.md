@@ -1,44 +1,36 @@
 # AnalyseMe Structure Guide
 
-AnalyseMe is prepared as a TypeScript Pi extension package. Runtime feature implementation is pending and must happen in a separate implementation session using the specs under `specs/`.
+AnalyseMe is a TypeScript Pi extension package that exposes read-only SonarQube/SonarCloud commands and tools.
 
-## Current preparation state
-
-```text
-src/
-├── extension.ts   # inert prepared entry point; future register* calls go here
-└── constants.ts   # project identity, command/tool names, env var names
-```
-
-The template example command/tool modules were removed so the prepared package does not expose unrelated runtime behavior.
-
-## Planned file layout
+## Current runtime layout
 
 ```text
 src/
-├── extension.ts          # only imports modules and registers implemented features
-├── constants.ts          # shared names and env var constants
-├── commands/             # planned /analyseme command and /analyseme help
-├── config/               # planned env/.env and sonar-project.properties loading
-├── sonar/                # planned SonarQube/SonarCloud API client and mappers
-├── tools/                # planned analyseme_* tool registrations
-├── ui/                   # planned read-only config TUI renderer
-└── utils/                # planned masking, truncation, formatting helpers
+├── extension.ts          # small entry point; delegates to implemented registrations
+├── constants.ts          # shared names, command/tool names, env var names
+├── commands/             # /analyseme and /analyseme help
+├── config/               # env/.env, sonar-project.properties, scope, and git diagnostics
+├── events/               # lightweight session status lifecycle hooks
+├── sonar/                # Sonar API client, endpoint builders, and response mappers
+├── tools/                # analyseme_* tool registrations and shared tool helpers
+├── ui/                   # read-only config/status renderer
+└── utils/                # masking and truncation helpers
 ```
 
-## Planned Pi surfaces
+## Implemented Pi surfaces
 
-- `/analyseme` — read-only configuration/status TUI.
+- `/analyseme` — read-only configuration/status output with masked token presence.
 - `/analyseme help` — setup and tool usage tips.
-- `analyseme_get_project_summary` — read project summary/metrics.
-- `analyseme_list_issues` — list active issues only.
-- `analyseme_get_issue` — retrieve issue location and Sonar rule guidance.
+- `analyseme_get_project_summary` — read project quality gate and summary metrics.
+- `analyseme_list_issues` — list active actionable issues only.
+- `analyseme_get_issue` — retrieve issue location, source context where available, flows, and Sonar rule guidance.
 - `analyseme_list_security_hotspots` — list security hotspots requiring review.
-- `analyseme_get_security_hotspot` — retrieve hotspot details and Sonar-provided security guidance.
+- `analyseme_get_security_hotspot` — retrieve hotspot details, source context where available, flows, and Sonar-provided security guidance.
+- `session_start`/`session_shutdown` — set/clear lightweight “AnalyseMe loaded” status when UI status is available.
 
 ## Implementation boundaries
 
-- Keep `src/extension.ts` small. It should import feature modules and call their `register*` functions.
+- Keep `src/extension.ts` small. It imports feature modules and calls implemented `register*` functions only.
 - Do not start background processes, timers, watchers, sockets, or long-lived jobs from the extension factory.
 - Keep tools read-only against SonarQube/SonarCloud.
 - Resolve project keys in this order: explicit tool argument, `SONARQUBE_PROJECT_KEY`, `sonar-project.properties` `sonar.projectKey`; treat `.git/config` remote names as diagnostics only.
@@ -51,7 +43,7 @@ src/
 
 ## Configuration TUI requirement
 
-The planned `/analyseme` TUI must follow `specs/spec-configuration-tui-design-standard.md`:
+The `/analyseme` status renderer follows `specs/spec-configuration-tui-design-standard.md`:
 
 - wide screens use a two-pane framed layout,
 - narrow screens use a one-pane framed layout,
@@ -63,7 +55,7 @@ The planned `/analyseme` TUI must follow `specs/spec-configuration-tui-design-st
 
 ## Validation
 
-Preparation and future implementation should pass:
+Run:
 
 ```bash
 npm run validate

@@ -1,42 +1,30 @@
 # AnalyseMe
 
-AnalyseMe is a prepared Pi extension project for read-only SonarQube and SonarCloud analysis tools.
+AnalyseMe is a Pi extension package that gives agents read-only SonarQube and SonarCloud analysis tools.
 
-> **Preparation status:** this repository has been prepared from the Pi extension template, but the planned commands and tools are **not implemented yet**. See `docs/PROJECT_DEFINITION_BRIEF.md` and the specs under `specs/` for the approved implementation plan.
+It helps agents inspect project health, active issues, issue locations, Sonar rule guidance, and security hotspots without browser access or Sonar write permissions.
 
-## Planned purpose
+## Implemented Pi surfaces
 
-AnalyseMe will help Pi agents retrieve relevant information from SonarQube/SonarCloud scans so they can understand and fix reported problems. The extension will use Sonar's REST API with a token and endpoint configured through environment variables or a local `.env` file.
+| Surface | Name | Purpose |
+| --- | --- | --- |
+| Command | `/analyseme` | Show read-only configuration/status output with masked secrets. |
+| Command | `/analyseme help` | Show setup, CI, and tool usage guidance. |
+| Tool | `analyseme_get_project_summary` | Fetch Sonar project quality gate and summary metrics. |
+| Tool | `analyseme_list_issues` | List active actionable issues, excluding ignored/false-positive/accepted/resolved-like results. |
+| Tool | `analyseme_get_issue` | Fetch issue detail, location context, source snippets where available, and Sonar-provided rule guidance. |
+| Tool | `analyseme_list_security_hotspots` | List security hotspots that require review. |
+| Tool | `analyseme_get_security_hotspot` | Fetch security hotspot details, source context where available, and Sonar-provided security guidance. |
 
-Planned behavior is read-only:
+All tools are read-only. AnalyseMe never mutates Sonar issues, hotspot status, assignments, comments, project configuration, repository files, or `.env`.
 
-- no Sonar issue transitions,
-- no false-positive/accepted marking,
-- no assignments or comments,
-- no repository file edits,
-- no telemetry.
-
-## Planned Pi surfaces
-
-| Surface | Name | Status | Purpose |
-| --- | --- | --- | --- |
-| Command | `/analyseme` | Planned | Read-only TUI showing configuration status and setup hints. |
-| Command | `/analyseme help` | Planned | Text help for local and CI usage. |
-| Tool | `analyseme_get_project_summary` | Planned | Fetch Sonar project summary/metrics for a `projectKey`. |
-| Tool | `analyseme_list_issues` | Planned | List active issues, excluding ignored/false-positive/accepted-like results. |
-| Tool | `analyseme_get_issue` | Planned | Fetch issue detail, location context, and Sonar rule guidance. |
-| Tool | `analyseme_list_security_hotspots` | Planned | List security hotspots that require review. |
-| Tool | `analyseme_get_security_hotspot` | Planned | Fetch security hotspot details and Sonar-provided security guidance. |
-
-The `/analyseme` TUI must follow `specs/spec-configuration-tui-design-standard.md`.
-
-## Planned configuration
+## Configuration
 
 Required:
 
 ```bash
 SONARQUBE_URL="https://sonar.example.com"
-SONARQUBE_TOKEN="your-token"
+SONARQUBE_TOKEN="replace-with-token"
 ```
 
 Optional:
@@ -53,7 +41,9 @@ SONARQUBE_BRANCH="main"
 SONARQUBE_PULL_REQUEST="123"
 ```
 
-Planned project key resolution order: explicit tool argument, `SONARQUBE_PROJECT_KEY`, then `sonar-project.properties` `sonar.projectKey`. `.git/config` remote names may be shown as diagnostics only and must not be used as automatic Sonar keys. Planned analysis scope resolution supports optional `branch` or `pullRequest`; they are mutually exclusive.
+Project key resolution order: explicit tool argument, `SONARQUBE_PROJECT_KEY`, then `sonar-project.properties` `sonar.projectKey`. `.git/config` remote names are diagnostics only and are not used as automatic Sonar keys.
+
+Analysis scope resolution order: explicit tool argument, `SONARQUBE_BRANCH`/`SONARQUBE_PULL_REQUEST`, then GitHub Actions context (`GITHUB_HEAD_REF`, `GITHUB_REF_NAME`, `GITHUB_REF`, `GITHUB_EVENT_PATH`). Branch and pull request scope are mutually exclusive.
 
 ### Local `.env` example
 
@@ -64,7 +54,7 @@ SONARQUBE_ORGANIZATION="your-organization"
 SONARQUBE_PROJECT_KEY="your-project-key"
 ```
 
-`.env` files are ignored by git and must not be committed.
+`.env` files are ignored by git and must not be committed. `/analyseme` reads status only and never writes `.env`.
 
 ### GitHub Actions example
 
@@ -83,8 +73,28 @@ jobs:
           SONARQUBE_BRANCH: ${{ github.ref_name }}
         run: |
           pi --no-session -e npm:@senad-d/pi-analyseme \
-            -p "Use AnalyseMe to inspect project <projectKey> and summarize active issues."
+            -p "Use AnalyseMe to inspect the project summary and active issues."
 ```
+
+## Commands
+
+```text
+/analyseme
+/analyseme help
+```
+
+- `/analyseme` renders a read-only configuration/status panel. It masks token presence, shows local `.env` status, and does not contact Sonar.
+- `/analyseme help` shows configuration variables, local and GitHub Actions snippets, tool names, and read-only guarantees. It does not require credentials or network access.
+
+## Tool usage overview
+
+- Use `analyseme_get_project_summary` first to inspect quality gate and core metrics.
+- Use `analyseme_list_issues` to retrieve active actionable issue rows. Use `page` and `limit` for pagination.
+- Use `analyseme_get_issue` for a specific issue key when exact location, source snippets, secondary locations, flows, and Sonar rule guidance are needed.
+- Use `analyseme_list_security_hotspots` for hotspots that require review.
+- Use `analyseme_get_security_hotspot` for a specific hotspot key when exact location and Sonar-provided security guidance are needed.
+
+Tool output is truncated when large and includes visible truncation notices plus structured metadata in `details`. Rule and hotspot guidance comes only from Sonar API responses; AnalyseMe does not invent remediation advice.
 
 ## Development
 
@@ -116,27 +126,26 @@ Do not use `pi -e .` for validation unless you intentionally want other configur
 
 ## Project docs
 
-- `docs/PROJECT_DEFINITION_BRIEF.md` — approved preparation brief.
-- `docs/STRUCTURE.md` — intended repository layout and implementation boundaries.
+- `docs/PROJECT_DEFINITION_BRIEF.md` — original preparation brief.
+- `docs/STRUCTURE.md` — repository layout and implementation boundaries.
+- `docs/VALIDATION.md` — default validation, isolated Pi smoke checks, and optional live Sonar smoke testing.
 - `specs/spec-architecture.md` — architecture plan.
 - `specs/spec-guidelines.md` — implementation guidelines.
-- `specs/spec-tasks.md` — future implementation task list for issues, security hotspots, commands, and validation; all checkboxes remain unchecked during preparation.
-- `specs/spec-configuration-tui-design-standard.md` — required visual standard for the planned config TUI.
+- `specs/spec-tasks.md` — implementation task list and progress.
+- `specs/spec-configuration-tui-design-standard.md` — visual standard used by `/analyseme` status rendering.
 
-## Publishing plan
+## Publishing
 
-The package identity is prepared as `@senad-d/pi-analyseme` with repository URL `https://github.com/senad-d/pi-analyseme`.
+Before publishing:
 
-Before publishing in a future session:
-
-1. Implement and validate the planned behavior.
-2. Update README/SECURITY/CHANGELOG from planned to implemented status.
-3. Run `npm run validate`.
-4. Run `npm publish --access public` from a clean working tree.
+1. Run `npm run validate`.
+2. Follow `docs/VALIDATION.md` for isolated Pi and optional live Sonar smoke checks.
+3. Verify no `.env`, `.pi`, specs, caches, reports, coverage, build output, or tarballs are packaged.
+4. Publish from a clean working tree with `npm publish --access public`.
 
 ## Security
 
-AnalyseMe will handle Sonar credentials and project analysis data. Read `SECURITY.md` before implementing, testing, or publishing.
+AnalyseMe handles Sonar credentials and project analysis data. Read `SECURITY.md` before installing, testing, or publishing.
 
 ## License
 

@@ -45,6 +45,7 @@ export interface AgentIssueSummary {
   issueStatus?: string;
   resolution?: string;
   rule?: string;
+  impacts: string[];
   location: SonarIssueLocation;
   tags: string[];
 }
@@ -120,6 +121,7 @@ export function mapIssueSummary(issue: unknown): AgentIssueSummary {
     issueStatus: stringField(payload, "issueStatus"),
     resolution: stringField(payload, "resolution"),
     rule: stringField(payload, "rule"),
+    impacts: mapIssueImpacts(payload.impacts),
     location: mapIssueLocation(payload),
     tags: stringArrayField(payload, "tags"),
   };
@@ -175,6 +177,22 @@ function mapRuleMetadata(rule: Record<string, unknown>): AgentRuleMetadata | und
     cleanCodeAttribute: stringField(rule, "cleanCodeAttribute"),
     tags: stringArrayField(rule, "tags"),
   };
+}
+
+function mapIssueImpacts(value: unknown): string[] {
+  const impacts = Array.isArray(value) ? value : [];
+  const mappedImpacts: string[] = [];
+
+  for (const impact of impacts) {
+    const payload = asRecord(impact);
+    const softwareQuality = stringField(payload, "softwareQuality");
+    const severity = stringField(payload, "severity");
+
+    if (softwareQuality && severity) mappedImpacts.push(`${softwareQuality}:${severity}`);
+    if (!softwareQuality && severity) mappedImpacts.push(severity);
+  }
+
+  return mappedImpacts;
 }
 
 function mapIssueLocation(payload: Record<string, unknown>): SonarIssueLocation {

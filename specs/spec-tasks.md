@@ -118,7 +118,7 @@ The tool should accept optional `projectKey`, `organization`, `branch`, and `pul
 
 ### 7. Register `analyseme_list_issues`
 
-- [ ] Implement and register the `analyseme_list_issues` Pi tool.
+- [x] Implement and register the `analyseme_list_issues` Pi tool.
 
 The tool should accept optional `projectKey`, `organization`, `branch`, and `pullRequest`, resolve missing project keys/scope from current-project config, retrieve active issues, exclude non-active issue results, and return agent-friendly issue rows.
 
@@ -132,7 +132,7 @@ The tool should accept optional `projectKey`, `organization`, `branch`, and `pul
 
 ### 8. Register `analyseme_get_issue`
 
-- [ ] Implement and register the `analyseme_get_issue` Pi tool.
+- [x] Implement and register the `analyseme_get_issue` Pi tool.
 
 The tool must fetch a specific issue and include location details matching the intent of Sonar's "Where is the issue?" section, plus Sonar-provided rule guidance where available.
 
@@ -146,7 +146,7 @@ The tool must fetch a specific issue and include location details matching the i
 
 ### 9. Register `analyseme_list_security_hotspots`
 
-- [ ] Implement and register the `analyseme_list_security_hotspots` Pi tool.
+- [x] Implement and register the `analyseme_list_security_hotspots` Pi tool.
 
 Security hotspots are separate from normal issues in SonarQube/SonarCloud. The tool should accept optional `projectKey`, `organization`, `branch`, and `pullRequest`, resolve missing project keys/scope from current-project config, retrieve hotspots requiring review, and return agent-friendly hotspot rows.
 
@@ -160,7 +160,7 @@ Security hotspots are separate from normal issues in SonarQube/SonarCloud. The t
 
 ### 10. Register `analyseme_get_security_hotspot`
 
-- [ ] Implement and register the `analyseme_get_security_hotspot` Pi tool.
+- [x] Implement and register the `analyseme_get_security_hotspot` Pi tool.
 
 The tool must fetch a specific security hotspot and include Sonar-provided security guidance/risk information where available. It must not invent remediation advice.
 
@@ -174,7 +174,7 @@ The tool must fetch a specific security hotspot and include Sonar-provided secur
 
 ### 11. Implement `/analyseme help`
 
-- [ ] Implement `/analyseme help` with concise setup tips, local `.env` example, GitHub Actions example, and tool usage guidance.
+- [x] Implement `/analyseme help` with concise setup tips, local `.env` example, GitHub Actions example, and tool usage guidance.
 
 Help should work in non-TUI modes and should not require network access or valid credentials.
 
@@ -188,7 +188,7 @@ Help should work in non-TUI modes and should not require network access or valid
 
 ### 12. Implement Read-Only `/analyseme` Config TUI
 
-- [ ] Implement the `/analyseme` read-only configuration/status TUI according to `specs/spec-configuration-tui-design-standard.md`.
+- [x] Implement the `/analyseme` read-only configuration/status TUI according to `specs/spec-configuration-tui-design-standard.md`.
 
 The TUI should show connection/config presence, optional SonarCloud organization, local `.env` status, CI/GitHub Actions guidance, tool list, and security notes. It must not write files.
 
@@ -205,7 +205,7 @@ The TUI should show connection/config presence, optional SonarCloud organization
 
 ### 13. Add Optional Lightweight Lifecycle Status
 
-- [ ] Add optional `session_start`/`session_shutdown` status behavior after commands/tools are implemented.
+- [x] Add optional `session_start`/`session_shutdown` status behavior after commands/tools are implemented.
 
 Show that AnalyseMe is loaded without starting background work. Clear the status on shutdown.
 
@@ -218,7 +218,7 @@ Show that AnalyseMe is loaded without starting background work. Clear the status
 
 ### 14. Update Documentation for Implemented Behavior
 
-- [ ] Update README, SECURITY, CHANGELOG, and structure docs to describe implemented behavior accurately.
+- [x] Update README, SECURITY, CHANGELOG, and structure docs to describe implemented behavior accurately.
 
 Replace any "planned" labels only after matching implementation and tests exist.
 
@@ -232,7 +232,7 @@ Replace any "planned" labels only after matching implementation and tests exist.
 
 ### 15. Add End-to-End Validation and Smoke Instructions
 
-- [ ] Add final validation coverage and smoke-test instructions for AnalyseMe.
+- [x] Add final validation coverage and smoke-test instructions for AnalyseMe.
 
 Default validation should stay offline/mocked. Real Sonar testing should be documented as an optional manual step requiring credentials.
 

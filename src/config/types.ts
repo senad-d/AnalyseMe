@@ -39,6 +39,7 @@ export interface SonarConnectionConfig {
 
 export interface AnalyseMeConfigLoadResult {
   config?: SonarConnectionConfig;
+  sources?: LoadedConfigValues;
   errors: string[];
   warnings: string[];
   envFile: EnvFileLoadResult;

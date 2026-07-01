@@ -44,10 +44,11 @@ export async function loadAnalyseMeConfig(
   errors.push(...validateConfiguredScope(sources));
 
   if (errors.length > 0 || !urlField.value || !tokenField.value) {
-    return { errors, warnings, envFile: parsedEnvFile.result };
+    return { sources, errors, warnings, envFile: parsedEnvFile.result };
   }
 
   return {
+    sources,
     config: {
       url: urlField.value,
       token: tokenField.value,
