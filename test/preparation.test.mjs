@@ -5,6 +5,28 @@ import test from "node:test";
 const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
 const extensionSource = await readFile(new URL("../src/extension.ts", import.meta.url), "utf8");
 
+const skeletonFiles = [
+  "../src/config/load-config.ts",
+  "../src/config/project-key.ts",
+  "../src/config/analysis-scope.ts",
+  "../src/config/git-diagnostics.ts",
+  "../src/config/types.ts",
+  "../src/sonar/client.ts",
+  "../src/sonar/endpoints.ts",
+  "../src/sonar/issue-mapping.ts",
+  "../src/sonar/hotspot-mapping.ts",
+  "../src/sonar/project-mapping.ts",
+  "../src/tools/project-summary.ts",
+  "../src/tools/list-issues.ts",
+  "../src/tools/get-issue.ts",
+  "../src/tools/list-security-hotspots.ts",
+  "../src/tools/get-security-hotspot.ts",
+  "../src/commands/analyseme.ts",
+  "../src/ui/config-tui.ts",
+  "../src/utils/truncation.ts",
+  "../src/utils/mask.ts",
+];
+
 async function readText(path) {
   return readFile(new URL(path, import.meta.url), "utf8");
 }
@@ -17,13 +39,20 @@ test("package declares AnalyseMe identity and Pi extension entry file", async ()
   await access(new URL("../src/extension.ts", import.meta.url));
 });
 
-test("prepared extension is intentionally inert until implementation", () => {
+test("extension entry point delegates only to implemented registrations", () => {
   assert.match(extensionSource, /analyseMeExtension/);
-  assert.match(extensionSource, /Intentionally inert during project preparation/);
+  assert.match(extensionSource, /registerProjectSummaryTool\(pi\)/);
   assert.doesNotMatch(extensionSource, /registerExampleCommand|registerExampleTool|template_greet|template-hello/);
+  assert.doesNotMatch(extensionSource, /\.registerTool\(|\.registerCommand\(|\.on\(/);
 });
 
-test("approved project brief and three implementation specs exist", async () => {
+test("runtime skeleton files exist for planned implementation areas", async () => {
+  for (const path of skeletonFiles) {
+    await access(new URL(path, import.meta.url));
+  }
+});
+
+test("approved project brief and implementation specs exist", async () => {
   const brief = await readText("../docs/PROJECT_DEFINITION_BRIEF.md");
   assert.match(brief, /@senad-d\/pi-analyseme/);
   assert.match(brief, /analyseme_get_project_summary/);
@@ -34,11 +63,5 @@ test("approved project brief and three implementation specs exist", async () => 
 
   assert.match(architecture, /SonarQube\/SonarCloud/);
   assert.match(guidelines, /SONARQUBE_TOKEN/);
-  assert.match(tasks, /- \[ \] Implement and register the `analyseme_get_issue` Pi tool\./);
-});
-
-test("task spec keeps all implementation tasks unchecked", async () => {
-  const tasks = await readText("../specs/spec-tasks.md");
-  assert.doesNotMatch(tasks, /^- \[x\]/im);
-  assert.match(tasks, /^- \[ \]/im);
+  assert.match(tasks, /- \[[ x]\] Implement and register the `analyseme_get_issue` Pi tool\./);
 });

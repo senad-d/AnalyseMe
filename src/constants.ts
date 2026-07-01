@@ -18,3 +18,15 @@ export const SONAR_ENV_VARS = {
   branch: "SONARQUBE_BRANCH",
   pullRequest: "SONARQUBE_PULL_REQUEST",
 } as const;
+
+export const SONAR_ENV_VAR_NAMES = [
+  SONAR_ENV_VARS.url,
+  SONAR_ENV_VARS.token,
+  SONAR_ENV_VARS.organization,
+  SONAR_ENV_VARS.projectKey,
+  SONAR_ENV_VARS.branch,
+  SONAR_ENV_VARS.pullRequest,
+] as const;
+
+export const DEFAULT_ENV_FILE_NAME = ".env";
+export const SONAR_PROJECT_PROPERTIES_FILE = "sonar-project.properties";

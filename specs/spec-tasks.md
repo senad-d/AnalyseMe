@@ -32,7 +32,7 @@ IMPORTANT: Execute every step in order, top to bottom. Keep each checkbox unchec
 
 ### 1. Establish Runtime Module Skeleton
 
-- [ ] Create the runtime module skeleton for config, Sonar API, tools, commands, UI, and utilities without adding network behavior yet.
+- [x] Create the runtime module skeleton for config, Sonar API, tools, commands, UI, and utilities without adding network behavior yet.
 
 Create directories and minimal exported types/functions that future tasks can fill in. Update `src/extension.ts` only to call registration functions when the related feature is implemented, not before.
 
@@ -44,7 +44,7 @@ Create directories and minimal exported types/functions that future tasks can fi
 
 ### 2. Implement Safe Configuration Loading
 
-- [ ] Implement configuration loading from process environment and local `.env` with token masking and validation.
+- [x] Implement configuration loading from process environment and local `.env` with token masking and validation.
 
 Support `SONARQUBE_URL`, `SONARQUBE_TOKEN`, optional `SONARQUBE_ORGANIZATION`, optional `SONARQUBE_PROJECT_KEY`, optional `SONARQUBE_BRANCH`, and optional `SONARQUBE_PULL_REQUEST`. Resolve project keys from explicit tool args, `SONARQUBE_PROJECT_KEY`, then `sonar-project.properties` `sonar.projectKey`; inspect `.git/config` remote names only for diagnostics/suggestions. Resolve analysis scope from explicit `branch`/`pullRequest`, env/`.env`, then GitHub Actions context. Reject configurations that provide both branch and pull request. Do not write `.env`.
 
@@ -62,7 +62,7 @@ Support `SONARQUBE_URL`, `SONARQUBE_TOKEN`, optional `SONARQUBE_ORGANIZATION`, o
 
 ### 3. Implement Sonar Read-Only HTTP Client
 
-- [ ] Implement a SonarQube/SonarCloud HTTP client wrapper for read-only REST API requests.
+- [x] Implement a SonarQube/SonarCloud HTTP client wrapper for read-only REST API requests.
 
 Use Node `fetch`, pass `AbortSignal`, normalize base URLs, apply token authentication, construct query strings safely, and map HTTP/API errors to useful messages. Do not use shell commands.
 
@@ -76,7 +76,7 @@ Use Node `fetch`, pass `AbortSignal`, normalize base URLs, apply token authentic
 
 ### 4. Implement Endpoint Builders and Active Issue Filtering
 
-- [ ] Implement endpoint/query builders and active issue/security hotspot filtering for project summary, issue search, issue detail, rule detail, hotspot list/detail, and optional source/location APIs. Use `/api/qualitygates/project_status`, `/api/measures/component`, `/api/issues/search`, `/api/rules/show`, source snippet endpoints such as `/api/sources/issue_snippets` or `/api/sources/show` when available, and hotspot endpoints `/api/hotspots/search` and `/api/hotspots/show`.
+- [x] Implement endpoint/query builders and active issue/security hotspot filtering for project summary, issue search, issue detail, rule detail, hotspot list/detail, and optional source/location APIs. Use `/api/qualitygates/project_status`, `/api/measures/component`, `/api/issues/search`, `/api/rules/show`, source snippet endpoints such as `/api/sources/issue_snippets` or `/api/sources/show` when available, and hotspot endpoints `/api/hotspots/search` and `/api/hotspots/show`.
 
 Represent Sonar API parameters in typed helpers. Filter out false-positive, ignored, accepted, resolved, closed, or equivalent non-active issue results. Treat security hotspots as a separate API family from normal issues.
 
@@ -89,7 +89,7 @@ Represent Sonar API parameters in typed helpers. Filter out false-positive, igno
 
 ### 5. Implement Response Mapping and Truncation Utilities
 
-- [ ] Implement response mappers and truncation helpers for agent-safe Sonar output.
+- [x] Implement response mappers and truncation helpers for agent-safe Sonar output.
 
 Map raw Sonar responses to compact summary, issue list, and issue detail shapes. Use Pi truncation utilities for long content and include explicit truncation notices.
 
@@ -104,7 +104,7 @@ Map raw Sonar responses to compact summary, issue list, and issue detail shapes.
 
 ### 6. Register `analyseme_get_project_summary`
 
-- [ ] Implement and register the `analyseme_get_project_summary` Pi tool.
+- [x] Implement and register the `analyseme_get_project_summary` Pi tool.
 
 The tool should accept optional `projectKey`, `organization`, `branch`, and `pullRequest`, use config/client modules to resolve missing project keys/scope, and return concise project summary data.
 
