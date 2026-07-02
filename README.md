@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://pi.dev"><img alt="pi package" src="https://img.shields.io/badge/pi-package-6f42c1?style=flat-square" /></a>
-  <a href="https://www.npmjs.com/package/@senad-d/pi-analyseme"><img alt="npm" src="https://img.shields.io/npm/v/%40senad-d%2Fpi-analyseme?style=flat-square" /></a>
+  <a href="https://www.npmjs.com/package/@senad-d/analyseme"><img alt="npm" src="https://img.shields.io/npm/v/%40senad-d%2Fanalyseme?style=flat-square" /></a>
   <a href="LICENSE"><img alt="license" src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" /></a>
   <a href="https://sonarcloud.io/summary/new_code?id=senad-d_AnalyseMe"><img alt="Quality Gate Status" src="https://sonarcloud.io/api/project_badges/measure?project=senad-d_AnalyseMe&metric=alert_status" /></a>
 </p>
@@ -54,7 +54,7 @@ AnalyseMe is a Pi extension for coding agents. It reads existing SonarQube/Sonar
 ## Quick Start
 
 ```bash
-pi install npm:@senad-d/pi-analyseme
+pi install npm:@senad-d/analyseme
 ```
 
 Set the Sonar variables shown in [Configuration](#configuration), then start pi:
@@ -84,17 +84,17 @@ AnalyseMe reads existing Sonar analysis data; it does not run a scanner.
 
 | Scope | Command | Notes |
 | --- | --- | --- |
-| Global | `pi install npm:@senad-d/pi-analyseme` | Loads in every trusted pi project. |
-| Project-local | `pi install npm:@senad-d/pi-analyseme -l` | Writes to `.pi/settings.json` in the current project. |
-| One run | `pi -e npm:@senad-d/pi-analyseme` | Try without changing settings. |
-| Git | `pi install git:github.com/senad-d/pi-analyseme@<tag>` | Pin a tag or commit. |
+| Global | `pi install npm:@senad-d/analyseme` | Loads in every trusted pi project. |
+| Project-local | `pi install npm:@senad-d/analyseme -l` | Writes to `.pi/settings.json` in the current project. |
+| One run | `pi -e npm:@senad-d/analyseme` | Try without changing settings. |
+| Git | `pi install git:github.com/senad-d/analyseme@<tag>` | Pin a tag or commit. |
 | Local checkout | `pi --no-extensions -e .` | Develop or smoke-test this repository in isolation. |
 
 Source checkout:
 
 ```bash
-git clone https://github.com/senad-d/pi-analyseme.git
-cd pi-analyseme
+git clone https://github.com/senad-d/analyseme.git
+cd analyseme
 npm ci
 npm run validate
 pi --no-extensions -e .
@@ -146,7 +146,7 @@ jobs:
           SONARQUBE_PROJECT_KEY: ${{ vars.SONARQUBE_PROJECT_KEY }}
           SONARQUBE_BRANCH: ${{ github.ref_name }}
         run: |
-          pi --no-session -e npm:@senad-d/pi-analyseme \
+          pi --no-session -e npm:@senad-d/analyseme \
             -p "Use AnalyseMe to inspect the project summary and active issues."
 ```
 
@@ -223,16 +223,16 @@ Project docs:
 
 ```bash
 pi update --extensions                       # update installed pi packages
-pi update npm:@senad-d/pi-analyseme          # update AnalyseMe only
-pi remove npm:@senad-d/pi-analyseme          # remove global install
-pi remove npm:@senad-d/pi-analyseme -l       # remove project-local install
+pi update npm:@senad-d/analyseme          # update AnalyseMe only
+pi remove npm:@senad-d/analyseme          # remove global install
+pi remove npm:@senad-d/analyseme -l       # remove project-local install
 ```
 
 ---
 
 ## Publishing
 
-AnalyseMe publishes to npm as `@senad-d/pi-analyseme`.
+AnalyseMe publishes to npm as `@senad-d/analyseme`.
 
 ```bash
 npm login

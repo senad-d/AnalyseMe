@@ -1,5 +1,5 @@
 {
-  "name": "@senad-d/pi-analyseme",
+  "name": "@senad-d/analyseme",
   "version": "0.1.1",
   "type": "module",
   "description": "Read-only SonarQube and SonarCloud analysis tools for Pi agents.",
@@ -7,12 +7,12 @@
   "author": "Senad Dizdarević <112484166+senad-d@users.noreply.github.com>",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/senad-d/pi-analyseme.git"
+    "url": "git+https://github.com/senad-d/analyseme.git"
   },
   "bugs": {
-    "url": "https://github.com/senad-d/pi-analyseme/issues"
+    "url": "https://github.com/senad-d/analyseme/issues"
   },
-  "homepage": "https://github.com/senad-d/pi-analyseme#readme",
+  "homepage": "https://github.com/senad-d/analyseme#readme",
   "keywords": [
     "pi-package",
     "pi-extension",

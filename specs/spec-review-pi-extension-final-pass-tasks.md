@@ -4,7 +4,7 @@
 
 - Date: 2026-07-02
 - Pass focus: strict verification of core Pi extension behavior, lifecycle, public tool/command contracts, edge cases, previous review claims, and remaining unknowns.
-- Project: `/Users/senad/Documents/Code/Moj_git/pi-analyseme`
+- Project: `/Users/senad/Documents/Code/Moj_git/analyseme`
 
 ## Files or areas reviewed
 

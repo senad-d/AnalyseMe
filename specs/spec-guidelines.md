@@ -71,7 +71,7 @@ Use Pi extension best practices, local package conventions, and Sonar read-only 
 
 ## Package Metadata Rules
 
-- Package name: `@senad-d/pi-analyseme`.
+- Package name: `@senad-d/analyseme`.
 - Display name: `AnalyseMe`.
 - Keep `pi.extensions` pointed at `./src/extension.ts` unless the entry point changes intentionally.
 - Keep Pi core packages in `peerDependencies` with `"*"`:
@@ -153,7 +153,7 @@ Use Pi extension best practices, local package conventions, and Sonar read-only 
 - SECURITY must document credential handling, network access, file access, no telemetry, and read-only Sonar behavior.
 - CHANGELOG should record preparation and later feature milestones.
 - Docs must avoid promising implemented runtime behavior until tests and validation prove it.
-- Keep repository references consistent with `https://github.com/senad-d/pi-analyseme`.
+- Keep repository references consistent with `https://github.com/senad-d/analyseme`.
 
 ## Testing Rules
 

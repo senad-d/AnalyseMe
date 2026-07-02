@@ -2,14 +2,14 @@
 
 ## 1. Bootstrap
 - Template source: `/Users/senad/Documents/Code/Moj_git/pi-tmp`
-- Target directory: `/Users/senad/Documents/Code/Moj_git/pi-analyseme`
+- Target directory: `/Users/senad/Documents/Code/Moj_git/analyseme`
 - Copy status: copied template into current directory; preserved existing `.pi/agent/guardme-settings.json`
 
 ## 2. Project identity
-- Package name: `@senad-d/pi-analyseme`
+- Package name: `@senad-d/analyseme`
 - Display name: `AnalyseMe`
 - Exported extension function: `analyseMeExtension`
-- Repository URL: `https://github.com/senad-d/pi-analyseme`
+- Repository URL: `https://github.com/senad-d/analyseme`
 - One-sentence pitch: AnalyseMe gives Pi agents read-only SonarQube/SonarCloud analysis tools so they can inspect project health, active issues, issue locations, and rule-provided fix guidance.
 
 ## 3. Users and use cases
@@ -85,11 +85,11 @@
 - SECURITY documents Sonar token handling, network behavior, no telemetry, no Sonar writes, and safe text handling.
 - CHANGELOG records prepared-project history and implemented runtime behavior.
 - package.json changes:
-  - Rename to `@senad-d/pi-analyseme`.
+  - Rename to `@senad-d/analyseme`.
   - Update description/repository/bugs/homepage/keywords.
   - Keep `pi.extensions: ["./src/extension.ts"]`.
   - Keep runtime dependencies minimal; config loading currently uses tested local parsing.
-- npm/git distribution plan: npm package and GitHub repo at `senad-d/pi-analyseme`.
+- npm/git distribution plan: npm package and GitHub repo at `senad-d/analyseme`.
 
 ## 9. Validation plan
 - Typecheck: `npm run typecheck`

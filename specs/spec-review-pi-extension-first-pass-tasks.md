@@ -4,7 +4,7 @@
 
 - Date: 2026-07-02
 - Pass focus: security vulnerabilities, runtime bugs, unsafe input handling, async failure modes, secret leakage risk, dependency and CI supply-chain risk.
-- Project: `/Users/senad/Documents/Code/Moj_git/pi-analyseme`
+- Project: `/Users/senad/Documents/Code/Moj_git/analyseme`
 
 ## Files or areas reviewed
 

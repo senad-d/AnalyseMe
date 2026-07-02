@@ -29,7 +29,7 @@ All notable changes to AnalyseMe will be documented in this file.
 
 ### Prepared
 
-- Prepared the Pi extension project as `@senad-d/pi-analyseme`.
+- Prepared the Pi extension project as `@senad-d/analyseme`.
 - Added the approved project definition brief.
 - Added architecture, guidelines, implementation task specs, and configuration TUI design standard.
 - Removed template example runtime registrations.

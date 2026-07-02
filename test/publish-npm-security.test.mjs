@@ -24,7 +24,7 @@ test("validates release semver before command argument construction", () => {
 });
 
 test("builds npm package specs only from validated package names and versions", () => {
-  assert.equal(buildNpmPackageSpec("@senad-d/pi-analyseme", "1.2.3"), "@senad-d/pi-analyseme@1.2.3");
+  assert.equal(buildNpmPackageSpec("@senad-d/analyseme", "1.2.3"), "@senad-d/analyseme@1.2.3");
   assert.equal(buildNpmPackageSpec("plain-package", "1.2.3-beta.1"), "plain-package@1.2.3-beta.1");
 
   assert.throws(() => buildNpmPackageSpec("BadName", "1.2.3"), /valid npm package name/);
@@ -34,7 +34,7 @@ test("builds npm package specs only from validated package names and versions", 
 
 test("builds fixed npm publish arguments from validated package names", () => {
   assert.deepEqual(buildNpmPublishArguments("plain-package"), ["publish"]);
-  assert.deepEqual(buildNpmPublishArguments("@senad-d/pi-analyseme"), ["publish", "--access", "public"]);
+  assert.deepEqual(buildNpmPublishArguments("@senad-d/analyseme"), ["publish", "--access", "public"]);
 
   assert.throws(() => buildNpmPublishArguments("@scope/"), /valid npm package name/);
 });

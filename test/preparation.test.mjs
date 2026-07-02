@@ -42,7 +42,7 @@ async function readText(path) {
 }
 
 test("package declares AnalyseMe identity and Pi extension entry file", async () => {
-  assert.equal(packageJson.name, "@senad-d/pi-analyseme");
+  assert.equal(packageJson.name, "@senad-d/analyseme");
   assert.match(packageJson.description, /SonarQube|SonarCloud/);
   assert.deepEqual(packageJson.pi?.extensions, ["./src/extension.ts"]);
   assert.ok(!packageJson._template, "template metadata should be removed before publishing");
@@ -76,7 +76,7 @@ test("implementation documentation files exist", async () => {
 
 test("approved project brief and implementation specs exist", async () => {
   const brief = await readText("../docs/PROJECT_DEFINITION_BRIEF.md");
-  assert.match(brief, /@senad-d\/pi-analyseme/);
+  assert.match(brief, /@senad-d\/analyseme/);
   assert.match(brief, /analyseme_get_project_summary/);
 
   const architecture = await readText("../specs/spec-architecture.md");

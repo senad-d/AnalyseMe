@@ -4,7 +4,7 @@
 
 - Date: 2026-07-02
 - Pass focus: maintainability, clean-code, logic defects, loose or duplicated behavior, validation gaps, and repository best practices.
-- Project: `/Users/senad/Documents/Code/Moj_git/pi-analyseme`
+- Project: `/Users/senad/Documents/Code/Moj_git/analyseme`
 
 ## Files or areas reviewed
 
