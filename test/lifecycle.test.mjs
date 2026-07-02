@@ -4,7 +4,7 @@ import test from "node:test";
 import { EXTENSION_STATUS_KEY } from "../src/constants.ts";
 import { registerAnalyseMeLifecycle } from "../src/events/lifecycle.ts";
 
-test("AnalyseMe lifecycle sets and clears UI status only when UI is available", async () => {
+test("AnalyseMe lifecycle clears UI status only when UI is available", async () => {
   const handlers = {};
   const statusCalls = [];
   const fakePi = {
@@ -32,7 +32,7 @@ test("AnalyseMe lifecycle sets and clears UI status only when UI is available", 
   await handlers.session_start({ type: "session_start", reason: "startup" }, ctxWithoutUi);
 
   assert.deepEqual(statusCalls, [
-    { key: EXTENSION_STATUS_KEY, value: "AnalyseMe loaded" },
+    { key: EXTENSION_STATUS_KEY, value: undefined },
     { key: EXTENSION_STATUS_KEY, value: undefined },
   ]);
 });

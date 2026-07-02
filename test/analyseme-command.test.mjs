@@ -273,9 +273,9 @@ test("/analyseme opens an interactive custom TUI in TUI mode", async () => {
       ui: {
         custom: async (factory) => {
           component = await factory(
-            {},
-            {},
-            {},
+            { requestRender: () => undefined },
+            { fg: (_color, text) => text, bold: (text) => text },
+            { matches: () => false },
             () => { doneCalled = true; },
           );
         },

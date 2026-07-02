@@ -194,6 +194,7 @@ Large results include visible truncation notices and structured metadata in `det
 npm ci
 npm run typecheck
 npm run lint
+npm run format:check
 npm run test
 npm run check:pack
 npm run validate
@@ -205,6 +206,8 @@ Isolated interactive smoke test:
 ```bash
 PI_SKIP_VERSION_CHECK=1 PI_TELEMETRY=0 pi --no-extensions -e .
 ```
+
+`npm run validate` includes type checking, linting, formatting checks, tests, package script checks, and package dry-run validation. CI runs the same validation chain.
 
 Project docs:
 

@@ -146,7 +146,9 @@ export async function executeGetIssueTool(
     signal,
     resolvedContext.config.token,
   );
-  const issue = mapIssueDetail(issuePayload, ruleResult.rule, sourceResult.source);
+  const issue = mapIssueDetail(issuePayload, ruleResult.rule, sourceResult.source, {
+    projectKey: resolvedContext.projectKey,
+  });
   const warnings = [...ruleResult.warnings, ...sourceResult.warnings];
   const textSafety = summarizeSonarTextSafety({ issue, warnings });
   const links = buildIssueLinks(resolvedContext.config.url, issue, resolvedContext.projectKey);

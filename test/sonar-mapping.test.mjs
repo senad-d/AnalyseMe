@@ -89,6 +89,36 @@ test("maps issue list and issue detail with locations, flows, source snippets, a
   assert.equal(detail.sourceSnippets[1].text, "doThing(value);");
 });
 
+test("maps issue and hotspot file paths with project-key-aware component parsing", () => {
+  const options = { projectKey: "group:artifact" };
+  const issue = {
+    key: "ISSUE-COLON",
+    component: "group:artifact:src/index.ts",
+    secondaryLocations: [{ component: "group:artifact:src/helper.ts" }],
+    flows: [{ locations: [{ component: "group:artifact:src/flow.ts" }] }],
+  };
+  const hotspot = {
+    key: "HOTSPOT-COLON",
+    component: "group:artifact:src/security.ts",
+    secondaryLocations: [{ component: "group:artifact:src/security-helper.ts" }],
+  };
+  const simpleIssue = mapIssueSummary({ key: "ISSUE-SIMPLE", component: "demo:src/simple.ts" });
+  const ambiguousIssue = mapIssueSummary({ key: "ISSUE-AMBIGUOUS", component: "group:artifact:src/index.ts" });
+  const explicitPathIssue = mapIssueSummary({ key: "ISSUE-PATH", component: "group:artifact:wrong.ts", path: "src/explicit.ts" });
+  const issueDetail = mapIssueDetail(issue, undefined, undefined, options);
+  const hotspotDetail = mapSecurityHotspotDetail(hotspot, undefined, options);
+
+  assert.equal(issueDetail.location.file, "src/index.ts");
+  assert.equal(issueDetail.secondaryLocations[0].file, "src/helper.ts");
+  assert.equal(issueDetail.flows[0][0].file, "src/flow.ts");
+  assert.equal(hotspotDetail.location.file, "src/security.ts");
+  assert.equal(hotspotDetail.secondaryLocations[0].file, "src/security-helper.ts");
+  assert.equal(simpleIssue.location.file, "src/simple.ts");
+  assert.equal(ambiguousIssue.location.file, undefined);
+  assert.equal(ambiguousIssue.location.component, "group:artifact:src/index.ts");
+  assert.equal(explicitPathIssue.location.file, "src/explicit.ts");
+});
+
 test("sanitizes and bounds Sonar-derived strings in mapped details", () => {
   const unsafeLongText = `\u001b[31m${"x".repeat(12_000)}\u0007`;
   const issueDetail = mapIssueDetail(

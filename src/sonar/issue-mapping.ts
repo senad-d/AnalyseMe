@@ -5,18 +5,17 @@ import {
   safeSonarString,
   safeSonarText,
 } from "../utils/text-safety.ts";
+import type { AgentSourceSnippet, SonarLocation, SonarLocationMappingOptions } from "./location-mapping.ts";
+import {
+  mapSonarFlows,
+  mapSonarLocationRecord,
+  mapSonarSecondaryLocations,
+  mapSourceSnippets,
+} from "./location-mapping.ts";
 
-export interface SonarIssueLocation {
-  component?: string;
-  file?: string;
-  line?: number;
-  textRange?: {
-    startLine?: number;
-    endLine?: number;
-    startOffset?: number;
-    endOffset?: number;
-  };
-}
+export type SonarIssueLocation = SonarLocation;
+export type { AgentSourceSnippet } from "./location-mapping.ts";
+export { mapSourceSnippets } from "./location-mapping.ts";
 
 export interface SonarIssueLike {
   status?: string;
@@ -27,12 +26,6 @@ export interface SonarIssueLike {
   isFalsePositive?: boolean;
   accepted?: boolean;
   ignored?: boolean;
-}
-
-export interface AgentSourceSnippet {
-  component?: string;
-  line?: number;
-  text: string;
 }
 
 export interface AgentRuleMetadata {
@@ -127,11 +120,17 @@ export function filterActiveSonarIssues<TIssue extends SonarIssueLike>(issues: T
   return issues.filter(isActiveSonarIssue);
 }
 
-export function mapIssueSearchResponse(response: unknown): AgentIssueSummary[] {
-  return mapIssueSearchResponseWithDiagnostics(response).issues;
+export function mapIssueSearchResponse(
+  response: unknown,
+  options: SonarLocationMappingOptions = {},
+): AgentIssueSummary[] {
+  return mapIssueSearchResponseWithDiagnostics(response, options).issues;
 }
 
-export function mapIssueSearchResponseWithDiagnostics(response: unknown): IssueSearchMappingResult {
+export function mapIssueSearchResponseWithDiagnostics(
+  response: unknown,
+  options: SonarLocationMappingOptions = {},
+): IssueSearchMappingResult {
   const payload = asRecord(response);
   const issues = payload.issues;
 
@@ -146,12 +145,15 @@ export function mapIssueSearchResponseWithDiagnostics(response: unknown): IssueS
   }
 
   return {
-    ...mapIssueSummariesWithDiagnostics(issues),
+    ...mapIssueSummariesWithDiagnostics(issues, options),
     missingIssuesArray: false,
   };
 }
 
-export function mapIssueSummariesWithDiagnostics(issues: unknown[]): IssueSummaryMappingResult {
+export function mapIssueSummariesWithDiagnostics(
+  issues: unknown[],
+  options: SonarLocationMappingOptions = {},
+): IssueSummaryMappingResult {
   const mappedIssues: AgentIssueSummary[] = [];
   const invalidRows: SonarMappingInvalidRow[] = [];
 
@@ -163,7 +165,7 @@ export function mapIssueSummariesWithDiagnostics(issues: unknown[]): IssueSummar
       return;
     }
 
-    mappedIssues.push(mapIssueSummary(issue));
+    mappedIssues.push(mapIssueSummary(issue, options));
   });
 
   return {
@@ -174,7 +176,10 @@ export function mapIssueSummariesWithDiagnostics(issues: unknown[]): IssueSummar
   };
 }
 
-export function mapIssueSummary(issue: unknown): AgentIssueSummary {
+export function mapIssueSummary(
+  issue: unknown,
+  options: SonarLocationMappingOptions = {},
+): AgentIssueSummary {
   const payload = asRecord(issue);
 
   return {
@@ -187,13 +192,18 @@ export function mapIssueSummary(issue: unknown): AgentIssueSummary {
     resolution: identifierField(payload, "resolution"),
     rule: identifierField(payload, "rule"),
     impacts: mapIssueImpacts(payload.impacts),
-    location: mapIssueLocation(payload),
+    location: mapSonarLocationRecord(payload, options),
     tags: stringArrayField(payload, "tags"),
   };
 }
 
-export function mapIssueDetail(issue: unknown, rule: unknown = undefined, sourceResponse: unknown = undefined): AgentIssueDetail {
-  const summary = mapIssueSummary(issue);
+export function mapIssueDetail(
+  issue: unknown,
+  rule: unknown = undefined,
+  sourceResponse: unknown = undefined,
+  options: SonarLocationMappingOptions = {},
+): AgentIssueDetail {
+  const summary = mapIssueSummary(issue, options);
   const rulePayload = asRecord(rule);
 
   return {
@@ -202,19 +212,9 @@ export function mapIssueDetail(issue: unknown, rule: unknown = undefined, source
     guidance: extractRuleGuidance(rulePayload),
     ruleMetadata: mapRuleMetadata(rulePayload),
     sourceSnippets: mapSourceSnippets(sourceResponse),
-    secondaryLocations: mapSecondaryLocations(issue),
-    flows: mapIssueFlows(issue),
+    secondaryLocations: mapSonarSecondaryLocations(issue, options),
+    flows: mapSonarFlows(issue, options),
   };
-}
-
-export function mapSourceSnippets(sourceResponse: unknown): AgentSourceSnippet[] {
-  const payload = asRecord(sourceResponse);
-  const issueSnippets = arrayField(payload, "issueSnippets");
-  const snippets = issueSnippets.length > 0 ? issueSnippets : arrayField(payload, "sources");
-
-  if (snippets.length === 0) return mapFlatSourceLines(payload);
-
-  return snippets.flatMap(mapSourceSnippetGroup);
 }
 
 export function extractRuleGuidance(rule: unknown): string | undefined {
@@ -282,91 +282,6 @@ function mapIssueImpacts(value: unknown): string[] {
   return mappedImpacts;
 }
 
-function mapIssueLocation(payload: Record<string, unknown>): SonarIssueLocation {
-  const component = mediumStringField(payload, "component");
-  const textRange = mapTextRange(payload.textRange);
-
-  return {
-    component,
-    file: component ? fileFromComponent(component) : undefined,
-    line: numberField(payload, "line") ?? textRange?.startLine,
-    textRange,
-  };
-}
-
-function mapLocationPayload(value: unknown): SonarIssueLocation {
-  const payload = asRecord(value);
-  const nestedTextRange = asRecord(payload.textRange);
-  const textRange = mapTextRange(payload.textRange);
-  const component = mediumStringField(payload, "component");
-
-  return {
-    component,
-    file: component ? fileFromComponent(component) : undefined,
-    line: numberField(payload, "line") ?? numberField(nestedTextRange, "startLine"),
-    textRange,
-  };
-}
-
-function mapTextRange(value: unknown): SonarIssueLocation["textRange"] {
-  const payload = asRecord(value);
-  const startLine = numberField(payload, "startLine");
-  const endLine = numberField(payload, "endLine");
-  const startOffset = numberField(payload, "startOffset");
-  const endOffset = numberField(payload, "endOffset");
-
-  if (!startLine && !endLine && startOffset === undefined && endOffset === undefined) return undefined;
-
-  return { startLine, endLine, startOffset, endOffset };
-}
-
-function mapSecondaryLocations(issue: unknown): SonarIssueLocation[] {
-  const payload = asRecord(issue);
-  return arrayField(payload, "secondaryLocations").map(mapLocationPayload);
-}
-
-function mapIssueFlows(issue: unknown): SonarIssueLocation[][] {
-  const payload = asRecord(issue);
-  const flows = arrayField(payload, "flows");
-  const mappedFlows: SonarIssueLocation[][] = [];
-
-  for (const flow of flows) {
-    const flowPayload = asRecord(flow);
-    mappedFlows.push(arrayField(flowPayload, "locations").map(mapLocationPayload));
-  }
-
-  return mappedFlows;
-}
-
-function mapSourceSnippetGroup(value: unknown): AgentSourceSnippet[] {
-  const payload = asRecord(value);
-  const sources = arrayField(payload, "sources");
-  const component = mediumStringField(payload, "component");
-
-  if (sources.length === 0) {
-    const text = sourceStringField(payload, "code") ?? sourceStringField(payload, "text");
-    if (!text) return [];
-
-    return [{ component, line: numberField(payload, "line"), text }];
-  }
-
-  return sources.map((source) => mapSourceLine(source, component));
-}
-
-function mapFlatSourceLines(payload: Record<string, unknown>): AgentSourceSnippet[] {
-  return arrayField(payload, "source").map((source) => mapSourceLine(source, undefined));
-}
-
-function mapSourceLine(value: unknown, inheritedComponent: string | undefined): AgentSourceSnippet {
-  const payload = asRecord(value);
-
-  return {
-    component: mediumStringField(payload, "component") ?? inheritedComponent,
-    line: numberField(payload, "line"),
-    text: sourceStringField(payload, "code") ?? sourceStringField(payload, "text") ?? "",
-  };
-}
-
 function extractDescriptionSections(rule: Record<string, unknown>): string | undefined {
   const sections = arrayField(rule, "descriptionSections");
   const renderedSections: string[] = [];
@@ -397,13 +312,6 @@ function isNonActiveIssueResolution(resolution: string | undefined): boolean {
 
 function normalizeIssueSignal(value: string): string {
   return value.trim().toUpperCase().replaceAll(" ", "_");
-}
-
-function fileFromComponent(component: string): string | undefined {
-  const separatorIndex = component.indexOf(":");
-  if (separatorIndex === -1) return undefined;
-
-  return component.slice(separatorIndex + 1);
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -441,11 +349,3 @@ function longStringField(record: Record<string, unknown>, key: string): string |
   return safeSonarString(record[key], SONAR_LONG_TEXT_MAX_CHARS);
 }
 
-function sourceStringField(record: Record<string, unknown>, key: string): string | undefined {
-  return safeSonarString(record[key], SONAR_MEDIUM_TEXT_MAX_CHARS);
-}
-
-function numberField(record: Record<string, unknown>, key: string): number | undefined {
-  const value = record[key];
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
-}

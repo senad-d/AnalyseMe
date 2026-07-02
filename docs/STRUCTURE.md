@@ -10,8 +10,8 @@ src/
 ├── constants.ts          # shared names, command/tool names, env var names
 ├── commands/             # /analyseme and /analyseme help
 ├── config/               # env/.env, sonar-project.properties, scope, and git diagnostics
-├── events/               # lightweight session status lifecycle hooks
-├── sonar/                # Sonar API client, endpoint builders, and response mappers
+├── events/               # lightweight session status cleanup hooks
+├── sonar/                # Sonar API client, endpoint builders, shared location mapping, and response mappers
 ├── tools/                # analyseme_* tool registrations and shared tool helpers
 ├── ui/                   # read-only config/status renderer
 └── utils/                # masking and truncation helpers
@@ -26,7 +26,7 @@ src/
 - `analyseme_get_issue` — retrieve issue location, source context where available, flows, and Sonar rule guidance.
 - `analyseme_list_security_hotspots` — list security hotspots requiring review.
 - `analyseme_get_security_hotspot` — retrieve hotspot details, source context where available, flows, and Sonar-provided security guidance.
-- `session_start`/`session_shutdown` — set/clear lightweight “AnalyseMe loaded” status when UI status is available.
+- `session_start`/`session_shutdown` — clear any stale AnalyseMe UI status without adding persistent bottom status text.
 
 ## Implementation boundaries
 

@@ -1,0 +1,41 @@
+{
+  "name": "sonarqube-9.9-fallbacks",
+  "product": "SonarQube",
+  "version": "9.9 LTS-style sanitized synthetic fallback payloads",
+  "projectKey": "group:artifact",
+  "issueKey": "ISSUE-99",
+  "endpoints": {
+    "issueSearch": {
+      "paging": { "pageIndex": 3, "pageSize": 1, "total": 7 },
+      "issues": [
+        {
+          "key": "ISSUE-99",
+          "message": "Use a checked exception type here.",
+          "severity": "CRITICAL",
+          "type": "BUG",
+          "status": "OPEN",
+          "rule": "java:S112",
+          "component": "group:artifact:src/main/java/App.java",
+          "textRange": { "startLine": 58, "endLine": 58, "startOffset": 10, "endOffset": 28 },
+          "secondaryLocations": [{ "component": "group:artifact:src/main/java/Helper.java", "line": 14 }],
+          "flows": [
+            { "locations": [{ "component": "group:artifact:src/main/java/App.java", "textRange": { "startLine": 56, "endLine": 56 } }] }
+          ]
+        }
+      ]
+    },
+    "ruleShow": {
+      "rule": {
+        "key": "java:S112",
+        "name": "Generic exceptions should never be thrown",
+        "htmlDesc": "Sonar-provided HTML guidance: throw a dedicated exception that callers can handle."
+      }
+    },
+    "sourceShow": {
+      "sources": [
+        { "line": 56, "code": "if (failed) {" },
+        { "line": 58, "code": "  throw new Exception(message);" }
+      ]
+    }
+  }
+}

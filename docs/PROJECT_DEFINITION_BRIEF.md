@@ -37,7 +37,7 @@
 | Tool | `analyseme_get_issue` | Fetch detailed issue/rule/location info | Include rule metadata fix guidance from Sonar APIs only; supports optional branch/PR scope where needed |
 | Tool | `analyseme_list_security_hotspots` | List security hotspots | Security hotspots are separate from issues and use read-only hotspot APIs |
 | Tool | `analyseme_get_security_hotspot` | Fetch security hotspot details | Include Sonar-provided hotspot/security guidance only |
-| Event | `session_start/session_shutdown` | Set/clear lightweight “AnalyseMe loaded” status | No background work |
+| Event | `session_start/session_shutdown` | Clear any stale AnalyseMe UI status | No persistent bottom status text |
 | UI | Read-only config TUI | Show masked config, CI/local setup tips, status | No `.env` writes |
 | Resource | none | No skills/prompts/themes planned | Specs/docs only |
 

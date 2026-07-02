@@ -55,6 +55,21 @@ function assertLineWidths(lines, width) {
   }
 }
 
+function createTaggedTheme() {
+  return {
+    fg: (color, text) => `<${color}>${text}</${color}>`,
+    bold: (text) => `<bold>${text}</bold>`,
+  };
+}
+
+function stripThemeTags(value) {
+  return value.replaceAll(/<\/?(?:accent|muted|dim|success|warning|bold)>/g, "");
+}
+
+function assertVisibleLineWidths(lines, width) {
+  assertLineWidths(lines.map(stripThemeTags), width);
+}
+
 test("renders wide two-pane AnalyseMe info panel without notes or tab help", () => {
   const model = buildConfigTuiModel(createResult());
   const lines = renderConfigTui(model, 88);
@@ -132,6 +147,19 @@ test("renders tiny AnalyseMe config TUI as a four-line borderless fallback", () 
   assert.match(lines[3], /q quit/);
 });
 
+test("applies semantic theme roles to focused and inactive selections", () => {
+  const model = buildConfigTuiModel(createResult());
+  const lines = renderConfigTui(model, 88, { focus: "settings", theme: createTaggedTheme() });
+  const text = lines.join("\n");
+
+  assertVisibleLineWidths(lines, 88);
+  assert.match(text, /<accent>╭─ AnalyseMe .* Ready ─╮<\/accent>/);
+  assert.match(text, /<muted>▶ <\/muted><muted>Connection\s*<\/muted>/);
+  assert.match(text, /<accent>▶ <\/accent><accent><bold>Sonar URL\s*<\/bold><\/accent>/);
+  assert.match(text, /<success>\s*https:\/\/sonar\.example\.com<\/success>/);
+  assert.match(text, /<dim>↑↓ section {2}q quit\s*<\/dim>/);
+});
+
 test("handles section navigation and close keys predictably", () => {
   const model = buildConfigTuiModel(createResult());
   let doneCalled = false;
@@ -146,5 +174,34 @@ test("handles section navigation and close keys predictably", () => {
   assert.match(component.render(80).join("\n"), /2\/2 • Default project key/);
 
   component.handleInput("\u001b");
+  assert.equal(doneCalled, true);
+});
+
+test("uses injected Pi keybindings and requests TUI rerender after navigation", () => {
+  const model = buildConfigTuiModel(createResult());
+  let renderRequests = 0;
+  let doneCalled = false;
+  const keybindings = {
+    matches(data, keybinding) {
+      if (data === "custom-down") return keybinding === "tui.select.down";
+      if (data === "custom-up") return keybinding === "tui.select.up";
+      if (data === "custom-close") return keybinding === "tui.select.cancel";
+      return false;
+    },
+  };
+  const component = new ConfigTuiComponent(model, () => { doneCalled = true; }, {
+    keybindings,
+    requestRender: () => { renderRequests += 1; },
+  });
+
+  component.handleInput("custom-down");
+  assert.match(component.render(80).join("\n"), /2\/2 • Default project key/);
+  assert.equal(renderRequests, 1);
+
+  component.handleInput("custom-up");
+  assert.match(component.render(80).join("\n"), /1\/2 • Sonar endpoint/);
+  assert.equal(renderRequests, 2);
+
+  component.handleInput("custom-close");
   assert.equal(doneCalled, true);
 });

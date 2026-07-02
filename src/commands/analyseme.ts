@@ -80,8 +80,12 @@ async function showAnalyseMeConfigTui(
   ctx: ExtensionCommandContext,
   model: ReturnType<typeof buildConfigTuiModel>,
 ): Promise<void> {
-  await ctx.ui.custom<void>((_tui, _theme, _keybindings, done) => {
-    return new ConfigTuiComponent(model, () => done(undefined));
+  await ctx.ui.custom<void>((tui, theme, keybindings, done) => {
+    return new ConfigTuiComponent(model, () => done(undefined), {
+      theme,
+      keybindings,
+      requestRender: () => tui.requestRender(),
+    });
   });
 }
 

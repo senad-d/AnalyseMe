@@ -33,7 +33,7 @@ const tempCwd = mkdtempSync(join(tmpdir(), "analyseme-pi-smoke-"));
 try {
   for (const check of smokeChecks) runSmokeCheck(check);
   console.log("Isolated Pi smoke passed for /analyseme help and /analyseme status.");
-  console.log("Tool names verified through /analyseme help output; fake-API unit tests guard registration.");
+  console.log("Tool names verified through /analyseme help output; public-surface contract tests guard registration.");
 } finally {
   rmSync(tempCwd, { recursive: true, force: true });
 }

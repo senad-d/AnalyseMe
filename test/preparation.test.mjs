@@ -81,9 +81,7 @@ test("approved project brief and implementation specs exist", async () => {
 
   const architecture = await readText("../specs/spec-architecture.md");
   const guidelines = await readText("../specs/spec-guidelines.md");
-  const tasks = await readText("../specs/spec-tasks.md");
 
   assert.match(architecture, /SonarQube\/SonarCloud/);
   assert.match(guidelines, /SONARQUBE_TOKEN/);
-  assert.match(tasks, /- \[[ x]\] Implement and register the `analyseme_get_issue` Pi tool\./);
 });

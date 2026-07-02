@@ -136,7 +136,9 @@ export async function executeListIssuesTool(
   const response = await client.getJson<unknown>({ ...request, signal });
   const issuePayloads = extractIssuePayloads(response);
   const activeIssuePayloads = filterActiveIssuePayloads(issuePayloads.issues);
-  const mappingResult = mapIssueSummariesWithDiagnostics(activeIssuePayloads);
+  const mappingResult = mapIssueSummariesWithDiagnostics(activeIssuePayloads, {
+    projectKey: resolvedContext.projectKey,
+  });
   const issues = mappingResult.issues;
   const warnings = [...issuePayloads.warnings, ...mappingResult.warnings];
   const scopeLabel = renderAnalysisScope(resolvedContext.scope);

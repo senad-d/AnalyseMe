@@ -125,7 +125,9 @@ export async function executeListSecurityHotspotsTool(
   const request = buildHotspotSearchEndpoint({ ...resolvedContext.endpointOptions, page, pageSize });
   const client = createSonarClient(resolvedContext.config);
   const response = await client.getJson<unknown>({ ...request, signal });
-  const mappingResult = mapHotspotSearchResponseWithDiagnostics(response);
+  const mappingResult = mapHotspotSearchResponseWithDiagnostics(response, {
+    projectKey: resolvedContext.projectKey,
+  });
   const mappedHotspots = mappingResult.hotspots;
   const hotspots = filterSecurityHotspotsRequiringReview(mappedHotspots);
   const warnings = mappingResult.warnings;

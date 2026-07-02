@@ -20,11 +20,47 @@ export function maskSecretTail(value: string | undefined): string {
 
 export function redactSecrets(text: string, secrets: Array<string | undefined>): string {
   let redacted = text;
+  const variants = redactionVariants(secrets);
 
-  for (const secret of secrets) {
-    if (!hasSecretValue(secret)) continue;
-    redacted = redacted.split(secret.trim()).join("[redacted]");
+  for (const secret of variants) {
+    redacted = redacted.split(secret).join("[redacted]");
   }
 
   return redacted;
+}
+
+function redactionVariants(secrets: Array<string | undefined>): string[] {
+  const variants = new Set<string>();
+
+  for (const secret of secrets) {
+    addSecretRedactionVariants(variants, secret);
+  }
+
+  return [...variants].sort((first, second) => second.length - first.length);
+}
+
+function addSecretRedactionVariants(variants: Set<string>, secret: string | undefined): void {
+  if (!hasSecretValue(secret)) return;
+
+  const trimmed = secret.trim();
+  const basicCredential = `${trimmed}:`;
+  const basicPayload = Buffer.from(basicCredential, "utf8").toString("base64");
+  const authorizationHeaderValue = `Basic ${basicPayload}`;
+
+  variants.add(trimmed);
+  variants.add(basicCredential);
+  variants.add(basicPayload);
+  variants.add(authorizationHeaderValue);
+  addEncodedSecretRedactionVariant(variants, trimmed);
+  addEncodedSecretRedactionVariant(variants, basicCredential);
+  addEncodedSecretRedactionVariant(variants, basicPayload);
+  addEncodedSecretRedactionVariant(variants, authorizationHeaderValue);
+}
+
+function addEncodedSecretRedactionVariant(variants: Set<string>, value: string): void {
+  try {
+    variants.add(encodeURIComponent(value));
+  } catch {
+    // Ignore malformed URI sequences in secret material; raw and Basic-derived variants still get redacted.
+  }
 }

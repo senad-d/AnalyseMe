@@ -1,0 +1,49 @@
+{
+  "name": "sonarcloud-current-hotspots",
+  "product": "SonarCloud",
+  "version": "current-style sanitized synthetic hotspot payloads",
+  "projectKey": "cloud-demo",
+  "hotspotKey": "CLOUD-HOTSPOT-1",
+  "endpoints": {
+    "hotspotSearch": {
+      "paging": { "pageIndex": 2, "pageSize": 1, "total": 4 },
+      "hotspots": [
+        {
+          "key": "CLOUD-HOTSPOT-1",
+          "message": "Review cryptographic key handling.",
+          "status": "TO_REVIEW",
+          "vulnerabilityProbability": "MEDIUM",
+          "securityCategory": "weak-cryptography",
+          "assignee": "security-reviewer",
+          "author": "developer",
+          "component": "cloud-demo:src/crypto.ts",
+          "line": 21,
+          "createdAt": "2026-03-01T08:00:00+0000",
+          "updatedAt": "2026-03-01T08:05:00+0000"
+        }
+      ]
+    },
+    "hotspotShow": {
+      "key": "CLOUD-HOTSPOT-1",
+      "message": "Review cryptographic key handling.",
+      "status": "TO_REVIEW",
+      "vulnerabilityProbability": "MEDIUM",
+      "securityCategory": "weak-cryptography",
+      "component": "cloud-demo:src/crypto.ts",
+      "line": 21,
+      "riskDescription": "SonarCloud risk: hard-coded key material may be disclosed.",
+      "vulnerabilityDescription": "SonarCloud vulnerability: static key material weakens confidentiality.",
+      "fixRecommendation": "SonarCloud fix: load keys from a managed secret store.",
+      "secondaryLocations": [{ "component": "cloud-demo:src/config.ts", "line": 4 }],
+      "flows": [
+        { "locations": [{ "component": "cloud-demo:src/crypto.ts", "textRange": { "startLine": 20, "endLine": 21 } }] }
+      ]
+    },
+    "sourceShow": {
+      "source": [
+        { "line": 20, "code": "const key = config.staticKey;" },
+        { "line": 21, "code": "return encrypt(value, key);" }
+      ]
+    }
+  }
+}

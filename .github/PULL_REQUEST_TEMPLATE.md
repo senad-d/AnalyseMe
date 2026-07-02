@@ -16,7 +16,7 @@ Closes #
 
 ## Validation
 
-- [ ] `npm run validate`
+- [ ] `npm run validate` (includes `format:check`)
 - [ ] Other/manual validation:
 
 ## Checklist

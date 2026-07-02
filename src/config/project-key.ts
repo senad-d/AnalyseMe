@@ -18,7 +18,7 @@ export async function resolveProjectKey(
   const explicitProjectKey = normalizeProjectKey(options.explicitProjectKey);
   const configuredProjectKey = normalizeProjectKey(options.configuredProjectKey);
   const tolerateFileReadErrors = options.tolerateFileReadErrors ?? false;
-  const gitDiagnostics = await readGitDiagnostics(cwd, { tolerateFileReadErrors });
+  const gitDiagnostics = await readGitDiagnostics(cwd, { tolerateFileReadErrors: true });
   const warnings = [...gitDiagnostics.warnings];
 
   if (explicitProjectKey) {

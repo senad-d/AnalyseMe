@@ -135,7 +135,9 @@ export async function executeGetSecurityHotspotTool(
     signal,
     resolvedContext.config.token,
   );
-  const hotspot = mapSecurityHotspotDetail(hotspotPayload, sourceResult.source);
+  const hotspot = mapSecurityHotspotDetail(hotspotPayload, sourceResult.source, {
+    projectKey: resolvedContext.projectKey,
+  });
   const links = buildHotspotLinks(resolvedContext.config.url, hotspot, resolvedContext.projectKey);
   const warnings = sourceResult.warnings;
   const textSafety = summarizeSonarTextSafety({ hotspot, warnings });

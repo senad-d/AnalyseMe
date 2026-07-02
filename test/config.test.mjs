@@ -31,6 +31,10 @@ async function writeGitConfig(cwd, content) {
   await writeFile(join(cwd, ".git", "config"), content, "utf8");
 }
 
+async function createUnreadableGitConfigPath(cwd) {
+  await mkdir(join(cwd, ".git", "config"), { recursive: true });
+}
+
 test("loads required config from environment variables and normalizes URL", async () => {
   const cwd = await createTempDir();
 
@@ -216,6 +220,34 @@ test("resolves project key from explicit argument, env config, and sonar-project
   }
 });
 
+test("keeps git diagnostics non-blocking for explicit, configured, and missing project keys", async () => {
+  const cwd = await createTempDir();
+
+  try {
+    await createUnreadableGitConfigPath(cwd);
+
+    const explicit = await resolveProjectKey({ cwd, explicitProjectKey: "argument-project" });
+    const configured = await resolveProjectKey({ cwd, configuredProjectKey: "env-project" });
+    const missing = await resolveProjectKey({ cwd });
+
+    assert.equal(explicit.projectKey, "argument-project");
+    assert.equal(explicit.source, "argument");
+    assert.equal(configured.projectKey, "env-project");
+    assert.equal(configured.source, "SONARQUBE_PROJECT_KEY");
+    assert.equal(missing.projectKey, undefined);
+    assert.equal(missing.source, "missing");
+
+    for (const resolution of [explicit, configured, missing]) {
+      assert.equal(resolution.gitDiagnostics.exists, true);
+      assert.deepEqual(resolution.gitDiagnostics.remotes, []);
+      assert.match(resolution.warnings.join("\n"), /Unable to read Git diagnostics file/);
+      assert.match(resolution.warnings.join("\n"), /readable file, not a directory/);
+    }
+  } finally {
+    await removeTempDir(cwd);
+  }
+});
+
 test("does not use git remote names as automatic project keys", async () => {
   const cwd = await createTempDir();
 
@@ -276,11 +308,28 @@ test("rejects mutually exclusive branch and pull request scope", async () => {
   }
 });
 
-test("masks and redacts token values", () => {
+test("masks and redacts raw and derived token values", () => {
+  const token = "abc 123+token";
+  const basicCredential = `${token}:`;
+  const basicPayload = Buffer.from(basicCredential, "utf8").toString("base64");
+  const authorizationHeader = `Basic ${basicPayload}`;
+  const encodedToken = encodeURIComponent(token);
+  const encodedAuthorizationHeader = encodeURIComponent(authorizationHeader);
+  const redacted = redactSecrets(
+    `token ${token} credential ${basicCredential} payload ${basicPayload} Authorization: ${authorizationHeader} encoded ${encodedToken} ${encodedAuthorizationHeader}`,
+    [token],
+  );
+
   assert.equal(maskSecretPresence("abc123"), "present");
   assert.equal(maskSecretPresence(undefined), "not set");
   assert.equal(maskSecretTail("abc12345"), "present (…2345)");
-  assert.equal(redactSecrets("token abc123", ["abc123"]), "token [redacted]");
+  assert.equal(redacted.includes(token), false);
+  assert.equal(redacted.includes(basicCredential), false);
+  assert.equal(redacted.includes(basicPayload), false);
+  assert.equal(redacted.includes(authorizationHeader), false);
+  assert.equal(redacted.includes(encodedToken), false);
+  assert.equal(redacted.includes(encodedAuthorizationHeader), false);
+  assert.match(redacted, /Authorization: \[redacted\]/);
 });
 
 test("removes sonar-project.properties during cleanup helper use", async () => {

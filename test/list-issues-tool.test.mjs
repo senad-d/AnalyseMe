@@ -166,6 +166,46 @@ test("executes analyseme_list_issues, filters non-active issues, and returns pag
   }
 });
 
+test("analyseme_list_issues uses colon-containing project keys when extracting file paths", async () => {
+  const cwd = await createTempDir();
+  const envSnapshot = snapshotEnv();
+  const fetchSnapshot = globalThis.fetch;
+  const response = createSearchResponse(
+    [activeIssue("ACTIVE-COLON", { component: "group:artifact:src/index.ts" })],
+    1,
+    1,
+    1,
+  );
+  const routeFetch = new IssueRouteFetch(response);
+
+  try {
+    applyEnv({
+      SONARQUBE_URL: "https://sonar.example.com",
+      SONARQUBE_TOKEN: "issues-secret-token",
+    });
+    globalThis.fetch = routeFetch.fetch.bind(routeFetch);
+
+    const result = await executeListIssuesTool(
+      "call-issues-colon-project",
+      { projectKey: " group:artifact ", limit: 1 },
+      undefined,
+      undefined,
+      { cwd },
+    );
+    const content = result.content[0].text;
+
+    assert.match(content, /group:artifact:src\/index.ts \(src\/index.ts\):12/);
+    assert.doesNotMatch(content, /\(artifact:src\/index.ts\)/);
+    assert.equal(result.details.projectKey, "group:artifact");
+    assert.equal(result.details.issues[0].location.file, "src/index.ts");
+    assert.match(routeFetch.calls[0].url, /componentKeys=group%3Aartifact/);
+  } finally {
+    restoreEnv(envSnapshot);
+    globalThis.fetch = fetchSnapshot;
+    await removeTempDir(cwd);
+  }
+});
+
 test("analyseme_list_issues reports malformed active rows without rendering placeholder keys", async () => {
   const cwd = await createTempDir();
   const envSnapshot = snapshotEnv();

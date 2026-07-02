@@ -1,0 +1,140 @@
+{
+  "name": "sonarqube-10.6-core",
+  "product": "SonarQube",
+  "version": "10.6-style sanitized synthetic payloads",
+  "projectKey": "demo",
+  "issueKey": "ISSUE-10",
+  "hotspotKey": "HOTSPOT-10",
+  "endpoints": {
+    "projectStatus": {
+      "projectStatus": {
+        "status": "ERROR",
+        "conditions": [
+          { "metricKey": "coverage", "status": "ERROR", "actualValue": "63.4" }
+        ]
+      }
+    },
+    "componentMeasures": {
+      "component": {
+        "key": "demo",
+        "analysisDate": "2026-02-01T10:00:00+0000",
+        "measures": [
+          { "metric": "bugs", "value": "1", "bestValue": false },
+          { "metric": "coverage", "value": "63.4", "bestValue": false },
+          { "metric": "security_hotspots", "value": "1" }
+        ]
+      }
+    },
+    "issueSearch": {
+      "paging": { "pageIndex": 1, "pageSize": 2, "total": 3 },
+      "issues": [
+        {
+          "key": "ISSUE-10",
+          "message": "Refactor this method to reduce cognitive complexity.",
+          "severity": "MAJOR",
+          "type": "CODE_SMELL",
+          "issueStatus": "OPEN",
+          "rule": "typescript:S3776",
+          "component": "demo:src/index.ts",
+          "line": 42,
+          "textRange": { "startLine": 42, "endLine": 42, "startOffset": 6, "endOffset": 22 },
+          "tags": ["brain-overload"],
+          "impacts": [{ "softwareQuality": "MAINTAINABILITY", "severity": "HIGH" }],
+          "secondaryLocations": [{ "component": "demo:src/helper.ts", "line": 9 }],
+          "flows": [
+            {
+              "locations": [
+                { "component": "demo:src/index.ts", "textRange": { "startLine": 40, "endLine": 40 } },
+                { "component": "demo:src/helper.ts", "textRange": { "startLine": 9, "endLine": 9 } }
+              ]
+            }
+          ]
+        },
+        {
+          "key": "ISSUE-ACCEPTED",
+          "message": "Accepted legacy issue.",
+          "severity": "MINOR",
+          "type": "CODE_SMELL",
+          "issueStatus": "ACCEPTED",
+          "component": "demo:src/legacy.ts",
+          "line": 5
+        }
+      ]
+    },
+    "ruleShow": {
+      "rule": {
+        "key": "typescript:S3776",
+        "name": "Cognitive Complexity of functions should not be too high",
+        "severity": "MAJOR",
+        "type": "CODE_SMELL",
+        "cleanCodeAttribute": "FOCUSED",
+        "tags": ["brain-overload"],
+        "descriptionSections": [
+          { "key": "how_to_fix", "content": "Sonar-provided section guidance: split the method and keep branches shallow." }
+        ]
+      }
+    },
+    "sourceIssueSnippets": {
+      "issueSnippets": [
+        {
+          "component": "demo:src/index.ts",
+          "sources": [
+            { "line": 41, "code": "if (input.enabled) {" },
+            { "line": 42, "code": "  doComplexThing(input);" }
+          ]
+        }
+      ]
+    },
+    "hotspotSearch": {
+      "paging": { "pageIndex": 1, "pageSize": 2, "total": 2 },
+      "hotspots": [
+        {
+          "key": "HOTSPOT-10",
+          "message": "Make sure this SQL query is safe.",
+          "status": "TO_REVIEW",
+          "vulnerabilityProbability": "HIGH",
+          "securityCategory": "sql-injection",
+          "component": "demo:src/db.ts",
+          "line": 33,
+          "creationDate": "2026-02-01T09:00:00+0000",
+          "updateDate": "2026-02-01T09:30:00+0000"
+        },
+        {
+          "key": "HOTSPOT-SAFE",
+          "message": "Reviewed hotspot.",
+          "status": "REVIEWED",
+          "resolution": "SAFE",
+          "component": "demo:src/safe.ts",
+          "line": 12
+        }
+      ]
+    },
+    "hotspotShow": {
+      "hotspot": {
+        "key": "HOTSPOT-10",
+        "message": "Make sure this SQL query is safe.",
+        "status": "TO_REVIEW",
+        "vulnerabilityProbability": "HIGH",
+        "securityCategory": "sql-injection",
+        "component": "demo:src/db.ts",
+        "line": 33,
+        "textRange": { "startLine": 33, "endLine": 33, "startOffset": 4, "endOffset": 18 },
+        "rule": {
+          "riskDescription": "Sonar risk: user-controlled values can change the query.",
+          "vulnerabilityDescription": "Sonar vulnerability: concatenated SQL can execute unintended commands.",
+          "fixRecommendation": "Sonar fix: use parameterized queries."
+        },
+        "secondaryLocations": [{ "component": "demo:src/query.ts", "line": 8 }],
+        "flows": [
+          { "locations": [{ "component": "demo:src/db.ts", "textRange": { "startLine": 31, "endLine": 31 } }] }
+        ]
+      }
+    },
+    "sourceShow": {
+      "sources": [
+        { "line": 32, "code": "const sql = buildSql(input);" },
+        { "line": 33, "code": "db.execute(sql);" }
+      ]
+    }
+  }
+}

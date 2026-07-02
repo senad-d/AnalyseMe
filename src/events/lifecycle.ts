@@ -4,16 +4,16 @@ import { EXTENSION_STATUS_KEY } from "../constants.ts";
 
 export function registerAnalyseMeLifecycle(pi: ExtensionAPI): void {
   pi.on("session_start", async (_event, ctx) => {
-    setAnalyseMeStatus(ctx, "AnalyseMe loaded");
+    clearAnalyseMeStatus(ctx);
   });
 
   pi.on("session_shutdown", async (_event, ctx) => {
-    setAnalyseMeStatus(ctx, undefined);
+    clearAnalyseMeStatus(ctx);
   });
 }
 
-function setAnalyseMeStatus(ctx: ExtensionContext, value: string | undefined): void {
+function clearAnalyseMeStatus(ctx: ExtensionContext): void {
   if (!ctx.hasUI) return;
 
-  ctx.ui.setStatus(EXTENSION_STATUS_KEY, value);
+  ctx.ui.setStatus(EXTENSION_STATUS_KEY, undefined);
 }

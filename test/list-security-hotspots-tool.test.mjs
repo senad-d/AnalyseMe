@@ -172,6 +172,43 @@ test("executes analyseme_list_security_hotspots with branch scope and pagination
   }
 });
 
+test("analyseme_list_security_hotspots uses colon-containing project keys when extracting file paths", async () => {
+  const cwd = await createTempDir();
+  const envSnapshot = snapshotEnv();
+  const fetchSnapshot = globalThis.fetch;
+  const response = createHotspotResponse(
+    [reviewHotspot("HOTSPOT-COLON", { component: "group:artifact:src/security.ts" })],
+    1,
+    1,
+    1,
+  );
+  const routeFetch = new HotspotRouteFetch(response);
+
+  try {
+    applyEnv({ SONARQUBE_URL: "https://sonar.example.com", SONARQUBE_TOKEN: "hotspot-secret-token" });
+    globalThis.fetch = routeFetch.fetch.bind(routeFetch);
+
+    const result = await executeListSecurityHotspotsTool(
+      "call-hotspots-colon-project",
+      { projectKey: " group:artifact ", limit: 1 },
+      undefined,
+      undefined,
+      { cwd },
+    );
+    const content = result.content[0].text;
+
+    assert.match(content, /group:artifact:src\/security.ts \(src\/security.ts\):33/);
+    assert.doesNotMatch(content, /\(artifact:src\/security.ts\)/);
+    assert.equal(result.details.projectKey, "group:artifact");
+    assert.equal(result.details.hotspots[0].location.file, "src/security.ts");
+    assert.match(routeFetch.calls[0].url, /projectKey=group%3Aartifact/);
+  } finally {
+    restoreEnv(envSnapshot);
+    globalThis.fetch = fetchSnapshot;
+    await removeTempDir(cwd);
+  }
+});
+
 test("analyseme_list_security_hotspots reports malformed rows without rendering placeholder keys", async () => {
   const cwd = await createTempDir();
   const envSnapshot = snapshotEnv();

@@ -4,8 +4,15 @@ import {
   SONAR_MEDIUM_TEXT_MAX_CHARS,
   safeSonarString,
 } from "../utils/text-safety.ts";
-import type { AgentSourceSnippet, SonarIssueLocation } from "./issue-mapping.ts";
-import { mapSourceSnippets } from "./issue-mapping.ts";
+import type { AgentSourceSnippet, SonarLocation, SonarLocationMappingOptions } from "./location-mapping.ts";
+import {
+  mapSonarFlows,
+  mapSonarLocationRecord,
+  mapSonarSecondaryLocations,
+  mapSourceSnippets,
+} from "./location-mapping.ts";
+
+type SonarIssueLocation = SonarLocation;
 
 export interface SonarSecurityHotspotLike {
   status?: string;
@@ -75,11 +82,17 @@ export function filterSecurityHotspotsRequiringReview<THotspot extends SonarSecu
   return hotspots.filter(isSecurityHotspotRequiringReview);
 }
 
-export function mapHotspotSearchResponse(response: unknown): AgentSecurityHotspotSummary[] {
-  return mapHotspotSearchResponseWithDiagnostics(response).hotspots;
+export function mapHotspotSearchResponse(
+  response: unknown,
+  options: SonarLocationMappingOptions = {},
+): AgentSecurityHotspotSummary[] {
+  return mapHotspotSearchResponseWithDiagnostics(response, options).hotspots;
 }
 
-export function mapHotspotSearchResponseWithDiagnostics(response: unknown): HotspotSearchMappingResult {
+export function mapHotspotSearchResponseWithDiagnostics(
+  response: unknown,
+  options: SonarLocationMappingOptions = {},
+): HotspotSearchMappingResult {
   const payload = asRecord(response);
   const hotspots = payload.hotspots;
 
@@ -94,12 +107,15 @@ export function mapHotspotSearchResponseWithDiagnostics(response: unknown): Hots
   }
 
   return {
-    ...mapSecurityHotspotSummariesWithDiagnostics(hotspots),
+    ...mapSecurityHotspotSummariesWithDiagnostics(hotspots, options),
     missingHotspotsArray: false,
   };
 }
 
-export function mapSecurityHotspotSummariesWithDiagnostics(hotspots: unknown[]): HotspotSummaryMappingResult {
+export function mapSecurityHotspotSummariesWithDiagnostics(
+  hotspots: unknown[],
+  options: SonarLocationMappingOptions = {},
+): HotspotSummaryMappingResult {
   const mappedHotspots: AgentSecurityHotspotSummary[] = [];
   const invalidRows: SonarMappingInvalidRow[] = [];
 
@@ -111,7 +127,7 @@ export function mapSecurityHotspotSummariesWithDiagnostics(hotspots: unknown[]):
       return;
     }
 
-    mappedHotspots.push(mapSecurityHotspotSummary(hotspot));
+    mappedHotspots.push(mapSecurityHotspotSummary(hotspot, options));
   });
 
   return {
@@ -122,7 +138,10 @@ export function mapSecurityHotspotSummariesWithDiagnostics(hotspots: unknown[]):
   };
 }
 
-export function mapSecurityHotspotSummary(hotspot: unknown): AgentSecurityHotspotSummary {
+export function mapSecurityHotspotSummary(
+  hotspot: unknown,
+  options: SonarLocationMappingOptions = {},
+): AgentSecurityHotspotSummary {
   const payload = asRecord(hotspot);
 
   return {
@@ -134,21 +153,25 @@ export function mapSecurityHotspotSummary(hotspot: unknown): AgentSecurityHotspo
     securityCategory: identifierField(payload, "securityCategory"),
     assignee: identifierField(payload, "assignee"),
     author: identifierField(payload, "author"),
-    location: mapHotspotLocation(payload),
+    location: mapSonarLocationRecord(payload, options),
     createdAt: identifierField(payload, "creationDate") ?? identifierField(payload, "createdAt"),
     updatedAt: identifierField(payload, "updateDate") ?? identifierField(payload, "updatedAt"),
   };
 }
 
-export function mapSecurityHotspotDetail(hotspot: unknown, sourceResponse: unknown = undefined): AgentSecurityHotspotDetail {
-  const summary = mapSecurityHotspotSummary(hotspot);
+export function mapSecurityHotspotDetail(
+  hotspot: unknown,
+  sourceResponse: unknown = undefined,
+  options: SonarLocationMappingOptions = {},
+): AgentSecurityHotspotDetail {
+  const summary = mapSecurityHotspotSummary(hotspot, options);
 
   return {
     ...summary,
     guidance: extractHotspotGuidance(hotspot),
     sourceSnippets: mapSourceSnippets(sourceResponse),
-    secondaryLocations: mapSecondaryLocations(hotspot),
-    flows: mapHotspotFlows(hotspot),
+    secondaryLocations: mapSonarSecondaryLocations(hotspot, options),
+    flows: mapSonarFlows(hotspot, options),
   };
 }
 
@@ -186,61 +209,6 @@ function buildHotspotMappingWarnings(invalidRows: SonarMappingInvalidRow[]): str
   ];
 }
 
-function mapHotspotLocation(payload: Record<string, unknown>): SonarIssueLocation {
-  const component = mediumStringField(payload, "component");
-  const textRange = mapTextRange(payload.textRange);
-
-  return {
-    component,
-    file: component ? fileFromComponent(component) : undefined,
-    line: numberField(payload, "line") ?? textRange?.startLine,
-    textRange,
-  };
-}
-
-function mapLocationPayload(value: unknown): SonarIssueLocation {
-  const payload = asRecord(value);
-  const component = mediumStringField(payload, "component");
-  const textRange = mapTextRange(payload.textRange);
-
-  return {
-    component,
-    file: component ? fileFromComponent(component) : undefined,
-    line: numberField(payload, "line") ?? textRange?.startLine,
-    textRange,
-  };
-}
-
-function mapTextRange(value: unknown): SonarIssueLocation["textRange"] {
-  const payload = asRecord(value);
-  const startLine = numberField(payload, "startLine");
-  const endLine = numberField(payload, "endLine");
-  const startOffset = numberField(payload, "startOffset");
-  const endOffset = numberField(payload, "endOffset");
-
-  if (!startLine && !endLine && startOffset === undefined && endOffset === undefined) return undefined;
-
-  return { startLine, endLine, startOffset, endOffset };
-}
-
-function mapSecondaryLocations(hotspot: unknown): SonarIssueLocation[] {
-  const payload = asRecord(hotspot);
-  return arrayField(payload, "secondaryLocations").map(mapLocationPayload);
-}
-
-function mapHotspotFlows(hotspot: unknown): SonarIssueLocation[][] {
-  const payload = asRecord(hotspot);
-  const flows = arrayField(payload, "flows");
-  const mappedFlows: SonarIssueLocation[][] = [];
-
-  for (const flow of flows) {
-    const flowPayload = asRecord(flow);
-    mappedFlows.push(arrayField(flowPayload, "locations").map(mapLocationPayload));
-  }
-
-  return mappedFlows;
-}
-
 function isNonReviewHotspotStatus(status: string | undefined): boolean {
   if (!status) return false;
 
@@ -257,22 +225,10 @@ function normalizeHotspotSignal(value: string): string {
   return value.trim().toUpperCase().replaceAll(" ", "_");
 }
 
-function fileFromComponent(component: string): string | undefined {
-  const separatorIndex = component.indexOf(":");
-  if (separatorIndex === -1) return undefined;
-
-  return component.slice(separatorIndex + 1);
-}
-
 function asRecord(value: unknown): Record<string, unknown> {
   if (typeof value === "object" && value !== null) return value as Record<string, unknown>;
 
   return {};
-}
-
-function arrayField(record: Record<string, unknown>, key: string): unknown[] {
-  const value = record[key];
-  return Array.isArray(value) ? value : [];
 }
 
 function identifierField(record: Record<string, unknown>, key: string): string | undefined {
@@ -287,7 +243,3 @@ function longStringField(record: Record<string, unknown>, key: string): string |
   return safeSonarString(record[key], SONAR_LONG_TEXT_MAX_CHARS);
 }
 
-function numberField(record: Record<string, unknown>, key: string): number | undefined {
-  const value = record[key];
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
-}
