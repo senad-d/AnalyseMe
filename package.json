@@ -1,6 +1,6 @@
 {
   "name": "@senad-d/pi-analyseme",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "description": "Read-only SonarQube and SonarCloud analysis tools for Pi agents.",
   "license": "MIT",
