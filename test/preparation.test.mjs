@@ -64,13 +64,13 @@ test("extension entry point delegates only to implemented registrations", () => 
 
 test("runtime implementation files exist for AnalyseMe surfaces", async () => {
   for (const path of skeletonFiles) {
-    await access(new URL(path, import.meta.url));
+    await assert.doesNotReject(() => access(new URL(path, import.meta.url)), `${path} should exist`);
   }
 });
 
 test("implementation documentation files exist", async () => {
   for (const path of documentationFiles) {
-    await access(new URL(path, import.meta.url));
+    await assert.doesNotReject(() => access(new URL(path, import.meta.url)), `${path} should exist`);
   }
 });
 

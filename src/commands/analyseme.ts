@@ -5,6 +5,7 @@ import {
   ANALYSEME_TOOL_NAMES,
   SONAR_ALLOW_INSECURE_HTTP_ENV_VAR,
   SONAR_ENV_VARS,
+  SONAR_SCANNER_PATH_ENV_VAR,
 } from "../constants.ts";
 import { loadAnalyseMeConfig } from "../config/load-config.ts";
 import { resolveProjectKey } from "../config/project-key.ts";
@@ -137,7 +138,8 @@ export function buildAnalyseMeHelpText(args: string = "help"): string {
   return [
     heading,
     "",
-    "AnalyseMe reads SonarQube/SonarCloud analysis data for Pi agents. It is read-only: it never changes Sonar issues, hotspot status, assignees, comments, project settings, repository files, or `.env`.",
+    "AnalyseMe reads SonarQube/SonarCloud analysis data for Pi agents. The read tools are read-only: they never change Sonar issues, hotspot status, assignees, comments, project settings, repository files, or `.env`. The only write path is " +
+      `${ANALYSEME_TOOL_NAMES.runScan}, which runs the local sonar-scanner CLI and submits a new analysis to the configured Sonar server.`,
     "",
     "## Required configuration",
     "",
@@ -151,6 +153,7 @@ export function buildAnalyseMeHelpText(args: string = "help"): string {
     `- ${SONAR_ENV_VARS.branch}: branch analysis scope. Mutually exclusive with ${SONAR_ENV_VARS.pullRequest}.`,
     `- ${SONAR_ENV_VARS.pullRequest}: pull request analysis scope. Mutually exclusive with ${SONAR_ENV_VARS.branch}.`,
     `- ${SONAR_ALLOW_INSECURE_HTTP_ENV_VAR}=true: explicit local/trusted-development opt-in for non-TLS \`http://\` Sonar URLs. Tokens can be exposed on the network; prefer HTTPS.`,
+    `- ${SONAR_SCANNER_PATH_ENV_VAR}: path to the sonar-scanner CLI binary used by ${ANALYSEME_TOOL_NAMES.runScan} when it is not on PATH.`,
     "",
     "Project key resolution order: explicit tool argument, `SONARQUBE_PROJECT_KEY`, then `sonar-project.properties` `sonar.projectKey`. `.git/config` remote names are diagnostics only.",
     "",
@@ -183,6 +186,7 @@ export function buildAnalyseMeHelpText(args: string = "help"): string {
     `- ${ANALYSEME_TOOL_NAMES.getIssue}: one issue's location, flows, source snippets, and Sonar-provided rule guidance. Inputs: issueKey plus optional projectKey, organization, branch, pullRequest.`,
     `- ${ANALYSEME_TOOL_NAMES.listSecurityHotspots}: security hotspots requiring review. Inputs: optional projectKey, organization, branch, pullRequest, limit, page.`,
     `- ${ANALYSEME_TOOL_NAMES.getSecurityHotspot}: one hotspot's location, flows, source context, and Sonar-provided security guidance. Inputs: hotspotKey plus optional projectKey, organization, branch, pullRequest.`,
+    `- ${ANALYSEME_TOOL_NAMES.runScan}: run the local sonar-scanner CLI and submit the analysis to the configured Sonar server. Inputs: optional projectKey, organization, branch, pullRequest, properties, waitForQualityGate, timeoutSeconds.`,
     "",
     "Use `/analyseme help` any time; it does not require credentials or network access.",
   ].join("\n");
@@ -195,13 +199,7 @@ function resolveRenderWidth(): number {
 function buildHelpDetails(): AnalyseMeHelpDetails {
   return {
     command: "/analyseme help",
-    tools: [
-      ANALYSEME_TOOL_NAMES.getProjectSummary,
-      ANALYSEME_TOOL_NAMES.listIssues,
-      ANALYSEME_TOOL_NAMES.getIssue,
-      ANALYSEME_TOOL_NAMES.listSecurityHotspots,
-      ANALYSEME_TOOL_NAMES.getSecurityHotspot,
-    ],
+    tools: Object.values(ANALYSEME_TOOL_NAMES),
     readOnly: true,
   };
 }

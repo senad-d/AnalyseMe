@@ -29,13 +29,13 @@ AnalyseMe is a Pi extension for coding agents. It reads existing SonarQube/Sonar
   </tr>
 </table>
 
-- **Read-only boundary:** no Sonar mutations, repository writes, comments, assignments, or configuration changes.
+- **Read-only boundary:** the read tools never mutate Sonar issues, write to the repository, comment, assign, or change configuration. The only write path is `analyseme_run_scan`, which submits a new analysis to the server.
 - **Agent-ready context:** quality gates, metrics, locations, snippets, rule guidance, and hotspot guidance are returned in pi tool output.
 - **Project-aware:** resolves project keys from tool input, environment, or `sonar-project.properties`.
 - **Scope-aware:** supports branch and pull request analysis contexts.
 - **Secret-safe:** Sonar tokens are masked in command output, tool output, details, errors, and tests.
 
-> **Security:** pi packages run with your full system permissions. AnalyseMe reads local configuration and sends read-only requests to your configured Sonar URL. Read [`SECURITY.md`](SECURITY.md).
+> **Security:** pi packages run with your full system permissions. AnalyseMe reads local configuration and sends read-only requests to your configured Sonar URL; `analyseme_run_scan` additionally runs the local `sonar-scanner` CLI and uploads analysis results to that URL. Read [`SECURITY.md`](SECURITY.md).
 
 ## Table of Contents
 
@@ -76,7 +76,7 @@ Ask the agent to use AnalyseMe:
 Use AnalyseMe to inspect the project summary and list the top 10 active Sonar issues.
 ```
 
-AnalyseMe reads existing Sonar analysis data; it does not run a scanner.
+AnalyseMe reads existing Sonar analysis data. With the optional `analyseme_run_scan` tool it can also run the local `sonar-scanner` CLI and submit a fresh analysis to your Sonar server.
 
 ---
 
@@ -115,6 +115,7 @@ AnalyseMe reads shell environment variables first, then a local project `.env` f
 | `SONARQUBE_BRANCH` | No | Branch analysis scope. Do not set with `SONARQUBE_PULL_REQUEST`. |
 | `SONARQUBE_PULL_REQUEST` | No | Pull request analysis scope. Do not set with `SONARQUBE_BRANCH`. |
 | `SONARQUBE_ALLOW_INSECURE_HTTP=true` | No | Development-only opt-in for trusted non-TLS Sonar URLs. |
+| `SONARQUBE_SCANNER_PATH` | No | Path to the `sonar-scanner` CLI binary used by `analyseme_run_scan` when it is not on `PATH`. |
 
 Minimal local setup:
 
@@ -163,12 +164,16 @@ jobs:
 | Tool | `analyseme_get_issue` | One issue's location, flows, source snippets, links, and Sonar rule guidance. |
 | Tool | `analyseme_list_security_hotspots` | Security hotspots requiring review. |
 | Tool | `analyseme_get_security_hotspot` | One hotspot's location, source context, links, and Sonar security guidance. |
+| Tool | `analyseme_run_scan` | Run the local `sonar-scanner` CLI and submit a fresh analysis to the configured Sonar server. |
 
 Suggested workflow:
 
 1. Start with `analyseme_get_project_summary`.
 2. Page through `analyseme_list_issues` or `analyseme_list_security_hotspots` with a bounded `limit`.
 3. Fetch a specific issue or hotspot before changing code.
+4. After changing code, run `analyseme_run_scan` (optionally with `waitForQualityGate`) to refresh the server analysis, then re-read the summary.
+
+`analyseme_run_scan` requires the [SonarScanner CLI](https://docs.sonarsource.com/sonarqube-server/latest/analyzing-source-code/scanners/sonarscanner/) (v5+) on `PATH` or via `SONARQUBE_SCANNER_PATH`. The Sonar URL and token are passed to the scanner only through its environment (`SONAR_HOST_URL`, `SONAR_TOKEN`), never on the command line, and connection/credential properties (`sonar.host.url`, `sonar.token`, `sonar.login`, `sonar.password`) are rejected from tool input.
 
 Large results include visible truncation notices and structured metadata in `details`.
 
@@ -185,6 +190,8 @@ Large results include visible truncation notices and structured metadata in `det
 | HTTP URL is rejected | Prefer HTTPS, or set `SONARQUBE_ALLOW_INSECURE_HTTP=true` only for trusted local development. |
 | 401/403 response | Verify the token can read the target project and analysis scope. |
 | Too much output | Use `limit`, `page`, or fetch a single issue/hotspot. |
+| `sonar-scanner` not found | Install the SonarScanner CLI or set `SONARQUBE_SCANNER_PATH` to the binary. |
+| Scan succeeds but results look stale | The server processes analyses asynchronously; wait for the reported CE task or pass `waitForQualityGate: true`. |
 
 ---
 

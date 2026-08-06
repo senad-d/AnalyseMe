@@ -2,6 +2,17 @@
 
 All notable changes to AnalyseMe will be documented in this file.
 
+## Unreleased
+
+### Added
+
+- Added `analyseme_run_scan`: runs the local `sonar-scanner` CLI in the project directory and submits the analysis to the configured Sonar server, with optional `properties`, `waitForQualityGate`, and `timeoutSeconds` inputs, scanner log tail output, and `report-task.txt` upload confirmation (dashboard and CE task links).
+- Added `SONARQUBE_SCANNER_PATH` to point `analyseme_run_scan` at a scanner binary that is not on `PATH`.
+
+### Security
+
+- `analyseme_run_scan` passes the Sonar URL and token to the scanner only through its environment (`SONAR_HOST_URL`, `SONAR_TOKEN`), never on the command line, redacts the token from scanner log output, and rejects `sonar.host.url`, `sonar.token`, `sonar.login`, and `sonar.password` from tool input.
+
 ## 0.1.0 - Unreleased
 
 ### Added

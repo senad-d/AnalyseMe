@@ -1,6 +1,6 @@
 # Security Policy
 
-AnalyseMe is a read-only Pi extension for SonarQube/SonarCloud analysis retrieval.
+AnalyseMe is a Pi extension for SonarQube/SonarCloud analysis retrieval. Its read tools are strictly read-only; the optional `analyseme_run_scan` tool runs the local `sonar-scanner` CLI and submits a new analysis to the configured Sonar server.
 
 ## Supported versions
 
@@ -8,13 +8,20 @@ Security fixes target the latest published version once the package is released.
 
 ## Security model
 
-AnalyseMe behavior is intentionally read-only:
+AnalyseMe read behavior is intentionally read-only:
 
 - It reads configuration from environment variables and optionally local `.env`.
 - It sends read-only HTTP requests to the configured SonarQube/SonarCloud endpoint.
 - It returns project summary, active issue lists, issue locations, source snippets where available, security hotspot details, and Sonar rule/hotspot metadata to the Pi agent.
 - It does not mutate Sonar issues, hotspot status, assignments, comments, project settings, or repositories.
 - It does not send telemetry.
+
+The only write path is `analyseme_run_scan`:
+
+- It runs the local `sonar-scanner` CLI (from `PATH` or `SONARQUBE_SCANNER_PATH`) in the project directory and uploads the analysis report to the configured Sonar URL.
+- The Sonar URL and token are passed to the scanner only through its environment (`SONAR_HOST_URL`, `SONAR_TOKEN`), never as command-line arguments.
+- Connection and credential scanner properties (`sonar.host.url`, `sonar.token`, `sonar.login`, `sonar.password`) are rejected from tool input, so a scan cannot be redirected to another server.
+- It still never mutates Sonar issues, hotspot status, assignments, comments, project settings, or repository files.
 
 ## Credentials
 
@@ -27,6 +34,7 @@ Configuration variables:
 - `SONARQUBE_BRANCH` — optional branch analysis scope.
 - `SONARQUBE_PULL_REQUEST` — optional pull request analysis scope; mutually exclusive with branch.
 - `SONARQUBE_ALLOW_INSECURE_HTTP` — optional explicit opt-in for local/trusted-development `http://` Sonar URLs only.
+- `SONARQUBE_SCANNER_PATH` — optional path to the `sonar-scanner` CLI binary used by `analyseme_run_scan`.
 
 AnalyseMe must never print, log, persist, or return the raw token in tool content, tool details, TUI output, errors, tests, or documentation examples. `/analyseme` shows token presence only in masked form.
 
@@ -36,7 +44,7 @@ AnalyseMe must never print, log, persist, or return the raw token in tool conten
 
 ## Network access
 
-Network access is limited to the configured SonarQube/SonarCloud URL. AnalyseMe rejects non-TLS `http://` Sonar URLs by default; `SONARQUBE_ALLOW_INSECURE_HTTP=true` is required to send tokens over HTTP for local/trusted development endpoints, and `/analyseme` surfaces that warning without printing token values. AnalyseMe uses Node `fetch` with abort support and does not shell out to `curl` or other commands for API calls.
+Network access is limited to the configured SonarQube/SonarCloud URL. AnalyseMe rejects non-TLS `http://` Sonar URLs by default; `SONARQUBE_ALLOW_INSECURE_HTTP=true` is required to send tokens over HTTP for local/trusted development endpoints, and `/analyseme` surfaces that warning without printing token values. AnalyseMe uses Node `fetch` with abort support and does not shell out to `curl` or other commands for API calls. `analyseme_run_scan` is the one exception that spawns a local process: the `sonar-scanner` CLI, which itself uploads the analysis to the configured Sonar URL.
 
 Default tests use mocked `fetch`; live Sonar credentials are not required for validation.
 
@@ -57,4 +65,4 @@ Before changing runtime behavior, read:
 - `specs/spec-guidelines.md`
 - `specs/spec-tasks.md`
 
-Do not weaken the read-only Sonar boundary without an explicit design decision.
+Do not weaken the read-only boundary of the read tools without an explicit design decision; `analyseme_run_scan` is the only sanctioned write path and must stay limited to submitting analyses.

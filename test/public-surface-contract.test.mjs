@@ -30,6 +30,15 @@ const expectedToolSchemaFields = {
   [ANALYSEME_TOOL_NAMES.getIssue]: ["issueKey", "projectKey", "organization", "branch", "pullRequest"],
   [ANALYSEME_TOOL_NAMES.listSecurityHotspots]: ["projectKey", "organization", "branch", "pullRequest", "limit", "page"],
   [ANALYSEME_TOOL_NAMES.getSecurityHotspot]: ["hotspotKey", "projectKey", "organization", "branch", "pullRequest"],
+  [ANALYSEME_TOOL_NAMES.runScan]: [
+    "projectKey",
+    "organization",
+    "branch",
+    "pullRequest",
+    "properties",
+    "waitForQualityGate",
+    "timeoutSeconds",
+  ],
 };
 
 function extensionEntryUrlFromManifest() {

@@ -8,6 +8,7 @@ export const ANALYSEME_TOOL_NAMES = {
   getIssue: "analyseme_get_issue",
   listSecurityHotspots: "analyseme_list_security_hotspots",
   getSecurityHotspot: "analyseme_get_security_hotspot",
+  runScan: "analyseme_run_scan",
 } as const;
 
 export const SONAR_ENV_VARS = {
@@ -20,6 +21,7 @@ export const SONAR_ENV_VARS = {
 } as const;
 
 export const SONAR_ALLOW_INSECURE_HTTP_ENV_VAR = "SONARQUBE_ALLOW_INSECURE_HTTP";
+export const SONAR_SCANNER_PATH_ENV_VAR = "SONARQUBE_SCANNER_PATH";
 
 export const SONAR_ENV_VAR_NAMES = [
   SONAR_ENV_VARS.url,

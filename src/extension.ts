@@ -7,14 +7,15 @@ import { registerGetSecurityHotspotTool } from "./tools/get-security-hotspot.ts"
 import { registerListIssuesTool } from "./tools/list-issues.ts";
 import { registerListSecurityHotspotsTool } from "./tools/list-security-hotspots.ts";
 import { registerProjectSummaryTool } from "./tools/project-summary.ts";
+import { registerRunScanTool } from "./tools/run-scan.ts";
 
 /**
  * AnalyseMe extension entry point.
  *
- * Runtime status: the read-only command, five Sonar tools, and lightweight
- * lifecycle cleanup hooks are implemented and registered here. Keep this file
- * small: import feature modules and call their register* functions here after
- * the feature is implemented and tested.
+ * Runtime status: the read-only command, five read-only Sonar tools, the local
+ * scan tool, and lightweight lifecycle cleanup hooks are implemented and
+ * registered here. Keep this file small: import feature modules and call their
+ * register* functions here after the feature is implemented and tested.
  */
 export default function analyseMeExtension(pi: ExtensionAPI) {
   registerProjectSummaryTool(pi);
@@ -22,6 +23,7 @@ export default function analyseMeExtension(pi: ExtensionAPI) {
   registerGetIssueTool(pi);
   registerListSecurityHotspotsTool(pi);
   registerGetSecurityHotspotTool(pi);
+  registerRunScanTool(pi);
   registerAnalyseMeCommand(pi);
   registerAnalyseMeLifecycle(pi);
 }
