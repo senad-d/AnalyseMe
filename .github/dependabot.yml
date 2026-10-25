@@ -13,6 +13,11 @@ updates:
     commit-message:
       prefix: deps
       include: scope
+    # typescript-eslint@8.72.0 requires TypeScript >=4.8.4 <6.1.0 and explicitly rejects TypeScript 7.
+    # Revisit the TypeScript pin/ignore when upstream supports newer compilers.
+    ignore:
+      - dependency-name: typescript
+        versions: [">=6.1.0"]
     groups:
       npm-development-dependencies:
         dependency-type: development
