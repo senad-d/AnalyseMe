@@ -59,7 +59,7 @@ Existing records and templates not listed above stay in place, including prior t
 
 ### 1. Keep repository planning records out of the npm package
 
-- [ ] Narrow the published Markdown selection to the reader-facing level while preserving the existing package guard.
+- [x] Narrow the published Markdown selection to the reader-facing level while preserving the existing package guard.
 
 #### Why
 
@@ -86,7 +86,7 @@ Depends on: none. Implement **Package boundary** in the manifest’s `files` lis
 
 ### 2. Walk a new Pi user from installation to one finding
 
-- [ ] Turn the README into a short first inspection and add the reader index at `docs/README.md`.
+- [x] Turn the README into a short first inspection and add the reader index at `docs/README.md`.
 
 #### Why
 
@@ -117,7 +117,7 @@ Depends on: Task 1. Apply **Reader routes** and **Package boundary**. Preserve t
 
 ### 3. Make setup and tool behavior searchable
 
-- [ ] Create the operator how-to at `docs/SETUP.md` and the command/tool reference at `docs/TOOLS.md`.
+- [x] Create the operator how-to at `docs/SETUP.md` and the command/tool reference at `docs/TOOLS.md`.
 
 #### Why
 
@@ -149,7 +149,7 @@ Depends on: Task 1. Use **Reader routes** and **Package boundary**. Carry the us
 
 ### 4. Give contributors one path from checkout to validation
 
-- [ ] Reorganize contributor, validation and security guidance around making, checking and safely submitting a change.
+- [x] Reorganize contributor, validation and security guidance around making, checking and safely submitting a change.
 
 #### Why
 
@@ -183,7 +183,7 @@ Depends on: Task 1. Use **Reader routes** and **Package boundary**. Move existin
 
 ### 5. Specify the implemented product and engineering constraints
 
-- [ ] Refresh the approved brief and engineering guidelines as current, source-backed specifications at their existing paths.
+- [x] Refresh the approved brief and engineering guidelines as current, source-backed specifications at their existing paths.
 
 #### Why
 
@@ -214,7 +214,7 @@ Depends on: Task 1. Follow **Reader routes** and **Package boundary**. Rewrite t
 
 ### 6. Explain the running architecture and its scan boundary
 
-- [ ] Replace the prospective architecture with an as-built explanation, refresh the module map and record the existing scanner decision.
+- [x] Replace the prospective architecture with an as-built explanation, refresh the module map and record the existing scanner decision.
 
 #### Why
 
@@ -247,7 +247,7 @@ Depends on: Task 1. Use **Reader routes** and **Package boundary**. Trace a read
 
 ### 7. Explain how Mission work is recorded in AnalyseMe
 
-- [ ] Create `docs/MISSION.md` as a guide to the project’s Mission workflow and its records.
+- [x] Create `docs/MISSION.md` as a guide to the project’s Mission workflow and its records.
 
 #### Why
 

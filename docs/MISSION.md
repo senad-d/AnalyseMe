@@ -9,7 +9,7 @@ For maintainers using Mission to change AnalyseMe: the repository records what t
 3. **Plan → assignment and changes.** In Mission’s `deliver-plan` workflow, the assigner matches tasks to agents. For a multi-task plan, agents implement in separate worktrees; independent tasks can run in parallel and dependent tasks wait. The plan is committed on the feature branch and goes into the pull request. The assignment points the implementer to the relevant plan heading rather than duplicating it.
 4. **Changes → review and delivery.** Mission integrates the tasks and verifies and reviews the combined change before the pull request. Objective 5’s plan calls for following reader routes and checking the package contents. Those are checks to run, not results. Look at the step handoffs for what ran and at the pull request for the proposed changes, review and CI status. A checked box or an opened pull request does not establish that the change shipped.
 
-For the workflow itself, see **Deliver or deliver-plan** in Mission’s shipped *Choosing work* documentation.
+For the workflow itself, ask the Mission dispatcher for **Deliver or deliver-plan** in *Choosing work*. It can look up that section and the other Mission documentation named below with its `mission_docs` tool.
 
 ## Where records live
 

@@ -109,13 +109,13 @@ Security hotspots are findings for security review, not ordinary issue rows. Use
 
 **Effect:** Unlike the read tools, this starts a local [SonarScanner CLI](https://docs.sonarsource.com/sonarqube-server/latest/analyzing-source-code/scanners/sonarscanner/) subprocess in the current project directory. The scanner can create work files such as `.scannerwork/report-task.txt` and uploads an analysis report to the configured Sonar server. Use it only for an explicit submission, not to check status or read a finding.
 
-**Prerequisites:** The scanner executable on `PATH` or [set in the process environment](SETUP.md#configure-locally), a resolvable project key, and a token authorized to scan the project. Check the checkout, destination, and scope before starting. AnalyseMe sets `SONAR_HOST_URL` and `SONAR_TOKEN` in the scanner's environment, not as command-line arguments.
+**Prerequisites:** Use SonarScanner CLI v5 or later, on `PATH` or [set in the process environment](SETUP.md#configure-locally). You also need a resolvable project key and a token authorized to scan the project. Check the checkout, destination, and scope before starting. AnalyseMe sets `SONAR_HOST_URL` and `SONAR_TOKEN` in the scanner's environment, not as command-line arguments.
 
 **Inputs:** The optional [common fields](#common-inputs-and-results), plus:
 
 | Optional field | Type and behavior |
 | --- | --- |
-| `properties` | Array of `key=value` strings for extra scanner settings. AnalyseMe adds them as `-D` arguments before its resolved project, organization, and scope values. It rejects malformed entries and the managed keys `sonar.host.url`, `sonar.token`, `sonar.login`, and `sonar.password`. Do not pass credentials here: arguments can appear in the tool result and process listings. |
+| `properties` | Array of `key=value` strings for extra scanner settings. AnalyseMe adds them as `-D` arguments before its resolved project, organization, and scope values. It ignores blank entries and rejects malformed nonblank entries and the managed keys `sonar.host.url`, `sonar.token`, `sonar.login`, and `sonar.password`. Do not pass credentials here: arguments can appear in the tool result and process listings. |
 | `waitForQualityGate` | Boolean, default `false`. With `true`, the scanner waits for server processing and can exit nonzero if the quality gate fails. |
 | `timeoutSeconds` | Integer, `10`–`3600`, default `600`. Sets when AnalyseMe starts stopping the scanner subprocess, including during a gate wait. |
 
@@ -127,4 +127,4 @@ Illustrative submission input (not an offline check):
 
 **Result:** Check `details.execution` for the exit code, signal, timeout flag, and duration. `details.succeeded` reflects a zero scanner exit code. `details.log` is a sanitized, token-redacted tail with its own truncation flag. A missing executable throws with installation guidance; AnalyseMe does not install it. A nonzero exit or timeout is not proof that nothing was uploaded: a failure can occur after submission, for example during a gate wait.
 
-For a zero exit, AnalyseMe uses `.scannerwork/report-task.txt` to report upload confirmation. If the file is missing or unreadable, upload is not confirmed; check the warning and scanner log. Otherwise `details.reportTask` and `details.links` can supply the dashboard and Compute Engine (CE) task ID or URL. Upload confirmation is not the same as processing completion. Without a gate wait, wait for the reported CE task to finish before reading the same project and scope again.
+For a zero exit, AnalyseMe uses `.scannerwork/report-task.txt` to report upload confirmation. If the file is missing or unreadable, upload is not confirmed; check the warning and scanner log. A readable report produces the label `confirmed` even if the file is left over from an earlier run: AnalyseMe does not check its age or verify the upload with the server. Use the dashboard or Compute Engine (CE) task in `details.reportTask` and `details.links`, when present, to check that the task belongs to this scan. Without a gate wait, wait for that task to finish successfully before reading the same project and scope again.
