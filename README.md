@@ -6,17 +6,11 @@
   <a href="https://pi.dev"><img alt="pi package" src="https://img.shields.io/badge/pi-package-6f42c1?style=flat-square" /></a>
   <a href="https://www.npmjs.com/package/@senad-d/analyseme"><img alt="npm" src="https://img.shields.io/npm/v/%40senad-d%2Fanalyseme?style=flat-square" /></a>
   <a href="LICENSE"><img alt="license" src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" /></a>
-  <a href="https://sonarcloud.io/summary/new_code?id=senad-d_AnalyseMe"><img alt="Quality Gate Status" src="https://sonarcloud.io/api/project_badges/measure?project=senad-d_AnalyseMe&metric=alert_status" /></a>
 </p>
 
-<p align="center">
-  SonarQube and SonarCloud analysis for <a href="https://pi.dev">pi</a>.
-  <br />Let agents inspect quality gates, active issues, source context, and security hotspots from the terminal.
-</p>
+# AnalyseMe
 
----
-
-AnalyseMe is a Pi extension for coding agents. It reads existing SonarQube/SonarCloud analysis data, summarizes project health, lists actionable findings, and fetches issue or hotspot details with Sonar-provided guidance.
+AnalyseMe is a [Pi](https://pi.dev) extension that lets you and your coding agent check an analyzed project's health and inspect findings in context.
 
 <table align="center">
   <tr>
@@ -24,59 +18,78 @@ AnalyseMe is a Pi extension for coding agents. It reads existing SonarQube/Sonar
   </tr>
   <tr>
     <td align="center">
-      <img src="img/demo.gif" alt="AnalyseMe demo: inspect SonarQube and SonarCloud findings inside pi" title="AnalyseMe demo" width="760">
+      <img src="img/demo.gif" alt="Inspecting analysis findings with AnalyseMe in Pi" title="AnalyseMe demo" width="760">
     </td>
   </tr>
 </table>
 
-- **Read-only boundary:** the read tools never mutate Sonar issues, write to the repository, comment, assign, or change configuration. The only write path is `analyseme_run_scan`, which submits a new analysis to the server.
-- **Agent-ready context:** quality gates, metrics, locations, snippets, rule guidance, and hotspot guidance are returned in pi tool output.
-- **Project-aware:** resolves project keys from tool input, environment, or `sonar-project.properties`.
-- **Scope-aware:** supports branch and pull request analysis contexts.
-- **Secret-safe:** Sonar tokens are masked in command output, tool output, details, errors, and tests.
-
-> **Security:** pi packages run with your full system permissions. AnalyseMe reads local configuration and sends read-only requests to your configured Sonar URL; `analyseme_run_scan` additionally runs the local `sonar-scanner` CLI and uploads analysis results to that URL. Read [`SECURITY.md`](SECURITY.md).
+> **Security:** Pi packages run with your full system permissions. Use a trusted analysis service and keep your token out of chat and version control. See [Security](SECURITY.md).
 
 ## Table of Contents
 
 - [Quick Start](#quick-start)
+- [Inspect a project](#inspect-a-project)
+- [If no results appear](#if-no-results-appear)
+- [Application documentation](#application-documentation)
 - [Installation](#installation)
-- [Configuration](#configuration)
-- [Commands and Tools](#commands-and-tools)
-- [Troubleshooting](#troubleshooting)
-- [Development and Validation](#development-and-validation)
 - [Update and Uninstall](#update-and-uninstall)
-- [Publishing](#publishing)
 - [License](#license)
 
 ---
 
 ## Quick Start
 
-```bash
-pi install npm:@senad-d/analyseme
-```
+1. With Pi installed, install AnalyseMe:
 
-Set the Sonar variables shown in [Configuration](#configuration), then start pi:
+   ```bash
+   pi install npm:@senad-d/analyseme
+   ```
 
-```bash
-pi
-```
+2. From the repository you want to inspect, start Pi:
 
-Check status and help:
+   ```bash
+   pi
+   ```
+
+3. Enter `/analyseme help` in Pi to look up the exact setting names. Help works without credentials or network access. Enter `/analyseme` to see what is already configured locally.
+4. Set the analysis service's HTTPS address, a token with read access, and a default project key if the repository doesn't supply one. Set the organization if your project requires it. Use a local `.env` in the repository, or export the settings and restart Pi from that shell. Nonempty shell settings take precedence over `.env`.
+5. Open `/analyseme` again. **Ready** means the local configuration has the required settings and a default project key. It does not mean the service is reachable, the project exists remotely, or the token has access. The status view is read-only. Press `q` to close it.
+
+---
+
+## Inspect a project
+
+Ask Pi for the project summary, then use a key from the list to open a specific finding. For example:
 
 ```text
-/analyseme
-/analyseme help
+Use AnalyseMe to summarize this project's quality gate and metrics, list the first 10 active issues, then open the first issue by its returned key. Show me the file, line, and any rule guidance available. Do not run a scan.
 ```
 
-Ask the agent to use AnalyseMe:
+To inspect a security hotspot instead, ask Pi to list hotspots that need review, then open one by its hotspot key and show any available source context and security guidance. Hotspots are reviewed separately from active issues.
 
-```text
-Use AnalyseMe to inspect the project summary and list the top 10 active Sonar issues.
-```
+The read tools retrieve existing results; they don't analyze your current working tree. To inspect a specific branch or pull request, tell Pi which one to use for the summary, list, and detail. Use a branch **or** a pull request, not both.
 
-AnalyseMe reads existing Sonar analysis data. With the optional `analyseme_run_scan` tool it can also run the local `sonar-scanner` CLI and submit a fresh analysis to your Sonar server.
+You don't need a scanner to read results. Only ask Pi to run `analyseme_run_scan` when you intend to submit a new analysis. It runs a local scanner and sends the analysis to the configured service; the service may still be processing it after the scanner finishes.
+
+---
+
+## If no results appear
+
+| What you see | What to try |
+| --- | --- |
+| **Needs setup** in `/analyseme` | Fix the missing or invalid settings shown in the status view. Use `/analyseme help` to check their names. |
+| **Needs project** in `/analyseme` | Set a default project key, or give Pi the project key to use for the request. The key may differ from the repository name. |
+| The service denies access | Check that your token can read the requested project. |
+| The list returns no findings | Check the selected scope, warnings, and pagination. A page can be empty after filtering out issues that no longer need action or hotspots that no longer need review. |
+| Results still show the previous analysis after a scan | Wait for the service to finish processing the submitted analysis, then ask Pi to read the summary again. |
+
+---
+
+## Application documentation
+
+- [What AnalyseMe does](docs/PROJECT_DEFINITION_BRIEF.md) — what you can learn about a project and its findings.
+- [Application specification](docs/APPLICATION_SPEC.md) — command behavior, tool inputs and outputs, and how to interpret results.
+- [How AnalyseMe works](docs/STRUCTURE.md) — where data comes from and what happens on a read or a scan.
 
 ---
 
@@ -84,7 +97,7 @@ AnalyseMe reads existing Sonar analysis data. With the optional `analyseme_run_s
 
 | Scope | Command | Notes |
 | --- | --- | --- |
-| Global | `pi install npm:@senad-d/analyseme` | Loads in every trusted pi project. |
+| Global | `pi install npm:@senad-d/analyseme` | Loads in every trusted Pi project. |
 | Project-local | `pi install npm:@senad-d/analyseme -l` | Writes to `.pi/settings.json` in the current project. |
 | One run | `pi -e npm:@senad-d/analyseme` | Try without changing settings. |
 | Git | `pi install git:github.com/senad-d/analyseme@<tag>` | Pin a tag or commit. |
@@ -99,99 +112,6 @@ npm ci
 npm run validate
 pi --no-extensions -e .
 ```
-
----
-
-## Configuration
-
-AnalyseMe reads shell environment variables first, then a local project `.env` file. Shell variables win, and AnalyseMe never writes configuration files.
-
-| Variable | Required | Meaning |
-| --- | --- | --- |
-| `SONARQUBE_URL` | Yes | SonarQube/SonarCloud base URL. Use HTTPS unless explicitly testing a trusted local HTTP server. |
-| `SONARQUBE_TOKEN` | Yes | Sonar API token with read access to the target project. |
-| `SONARQUBE_ORGANIZATION` | SonarCloud usually | SonarCloud organization. |
-| `SONARQUBE_PROJECT_KEY` | Usually | Default project key when no tool `projectKey` is passed. |
-| `SONARQUBE_BRANCH` | No | Branch analysis scope. Do not set with `SONARQUBE_PULL_REQUEST`. |
-| `SONARQUBE_PULL_REQUEST` | No | Pull request analysis scope. Do not set with `SONARQUBE_BRANCH`. |
-| `SONARQUBE_ALLOW_INSECURE_HTTP=true` | No | Development-only opt-in for trusted non-TLS Sonar URLs. |
-| `SONARQUBE_SCANNER_PATH` | No | Path to the `sonar-scanner` CLI binary used by `analyseme_run_scan` when it is not on `PATH`. |
-
-Minimal local setup:
-
-```bash
-SONARQUBE_URL="https://sonarcloud.io"
-SONARQUBE_TOKEN="replace-with-local-token"
-SONARQUBE_ORGANIZATION="your-organization"
-SONARQUBE_PROJECT_KEY="your-project-key"
-```
-
-Resolution order:
-
-- Project key: explicit tool input → `SONARQUBE_PROJECT_KEY` → `sonar-project.properties` `sonar.projectKey`.
-- Analysis scope: explicit tool input → configured branch/PR variable → GitHub Actions context.
-
-GitHub Actions example:
-
-```yaml
-jobs:
-  analyseme:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Run Pi with AnalyseMe
-        env:
-          SONARQUBE_URL: ${{ secrets.SONARQUBE_URL }}
-          SONARQUBE_TOKEN: ${{ secrets.SONARQUBE_TOKEN }}
-          SONARQUBE_ORGANIZATION: ${{ secrets.SONARQUBE_ORGANIZATION }}
-          SONARQUBE_PROJECT_KEY: ${{ vars.SONARQUBE_PROJECT_KEY }}
-          SONARQUBE_BRANCH: ${{ github.ref_name }}
-        run: |
-          pi --no-session -e npm:@senad-d/analyseme \
-            -p "Use AnalyseMe to inspect the project summary and active issues."
-```
-
----
-
-## Commands and Tools
-
-| Surface | Name | Use it for |
-| --- | --- | --- |
-| Command | `/analyseme` | Show masked configuration/status output. |
-| Command | `/analyseme help` | Show setup, CI, and usage guidance. |
-| Tool | `analyseme_get_project_summary` | Quality gate and summary metrics. |
-| Tool | `analyseme_list_issues` | Active actionable issues with pagination. |
-| Tool | `analyseme_get_issue` | One issue's location, flows, source snippets, links, and Sonar rule guidance. |
-| Tool | `analyseme_list_security_hotspots` | Security hotspots requiring review. |
-| Tool | `analyseme_get_security_hotspot` | One hotspot's location, source context, links, and Sonar security guidance. |
-| Tool | `analyseme_run_scan` | Run the local `sonar-scanner` CLI and submit a fresh analysis to the configured Sonar server. |
-
-Suggested workflow:
-
-1. Start with `analyseme_get_project_summary`.
-2. Page through `analyseme_list_issues` or `analyseme_list_security_hotspots` with a bounded `limit`.
-3. Fetch a specific issue or hotspot before changing code.
-4. After changing code, run `analyseme_run_scan` (optionally with `waitForQualityGate`) to refresh the server analysis, then re-read the summary.
-
-`analyseme_run_scan` requires the [SonarScanner CLI](https://docs.sonarsource.com/sonarqube-server/latest/analyzing-source-code/scanners/sonarscanner/) (v5+) on `PATH` or via `SONARQUBE_SCANNER_PATH`. The Sonar URL and token are passed to the scanner only through its environment (`SONAR_HOST_URL`, `SONAR_TOKEN`), never on the command line, and connection/credential properties (`sonar.host.url`, `sonar.token`, `sonar.login`, `sonar.password`) are rejected from tool input.
-
-Large results include visible truncation notices and structured metadata in `details`.
-
----
-
-## Troubleshooting
-
-| Problem | Try |
-| --- | --- |
-| Missing URL or token | Set `SONARQUBE_URL` and `SONARQUBE_TOKEN`. |
-| SonarCloud cannot find the project | Set `SONARQUBE_ORGANIZATION` and `SONARQUBE_PROJECT_KEY`, or pass them as tool inputs. |
-| Wrong project is queried | Pass `projectKey` explicitly or fix `SONARQUBE_PROJECT_KEY`. |
-| Branch/PR conflict | Set only one of `SONARQUBE_BRANCH` or `SONARQUBE_PULL_REQUEST`. |
-| HTTP URL is rejected | Prefer HTTPS, or set `SONARQUBE_ALLOW_INSECURE_HTTP=true` only for trusted local development. |
-| 401/403 response | Verify the token can read the target project and analysis scope. |
-| Too much output | Use `limit`, `page`, or fetch a single issue/hotspot. |
-| `sonar-scanner` not found | Install the SonarScanner CLI or set `SONARQUBE_SCANNER_PATH` to the binary. |
-| Scan succeeds but results look stale | The server processes analyses asynchronously; wait for the reported CE task or pass `waitForQualityGate: true`. |
 
 ---
 
