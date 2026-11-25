@@ -1,140 +1,58 @@
-# AnalyseMe Validation and Smoke Testing
-
-Default validation is offline and does not require live SonarQube/SonarCloud credentials.
+# AnalyseMe validation and smoke testing
 
 ## Default validation
 
-Run from the repository root:
+Start from a [prepared checkout (repository)](https://github.com/senad-d/analyseme/blob/main/CONTRIBUTING.md#prepare-a-checkout). From the repository root, run:
 
 ```bash
 npm run validate
 ```
 
-This runs:
+This is the same chain CI runs: type checking (`typecheck`), linting (`lint`), formatting (`format:check`), the test suite (`test`), a syntax check for the package guard (`check`), and the package contents check (`check:pack`). After dependency installation, it needs no live Sonar account, token, or scanner.
 
-- `npm run typecheck`
-- `npm run lint`
-- `npm run format:check`
-- `npm run test`
-- `npm run check`
-- `npm run check:pack`
-
-The tests mock Sonar API responses. Do not add live Sonar credentials to default tests. CI runs the same `npm run validate` chain, so formatting regressions fail pull-request validation.
+Sonar API tests use mocked responses. Scanner tests exercise a local fake executable and temporary files to check behavior such as argument handling, report parsing, and timeouts without submitting an analysis. The isolated Pi smoke test and the live read check below are not part of this chain.
 
 ## Package contents check
-
-Run:
 
 ```bash
 npm run check:pack
 ```
 
-The package dry-run must not include:
+The guard inspects an npm package dry-run and fails on forbidden files, including environment files, local `.pi/` state, planning specs, dependencies, caches, generated reports, tarballs, and editor or OS artifacts. To inspect the file list as JSON without publishing, use:
 
-- `.env` or `.env.*`
-- `.pi/`
-- `specs/`
-- local caches such as `.cache/`, `.local/`, `.trivycache/`
-- generated reports or coverage
-- build output
-- npm tarballs (`*.tgz`)
-- `node_modules/`
+```bash
+npm run pack:dry-run
+```
+
+Check that the reader docs ship: `README.md`, `SECURITY.md`, `CHANGELOG.md`, and the top-level `docs/*.md` pages. Nested design, task, and decision records, root specs, `CONTRIBUTING.md`, tests, skill and agent instructions are repository-only. The manifest controls what ships; the guard does not check documentation links.
 
 ## Isolated Pi smoke test
-
-Run the offline smoke script from the repository root:
 
 ```bash
 npm run smoke:pi
 ```
 
-The script runs Pi with isolated extension loading and a temporary working directory:
+The script loads the checkout in Pi without other configured extensions, in a temporary working directory, without a session. It runs `/analyseme help` and `/analyseme` in print mode with placeholder Sonar settings. It looks for setup text and the five retrieval tool names in help, checks status text including token presence, and fails if either command prints the placeholder token. It does not call any tools or require live Sonar access.
 
-```bash
-PI_SKIP_VERSION_CHECK=1 PI_TELEMETRY=0 pi --no-extensions -e <repo-root> --no-session -p "/analyseme help"
-PI_SKIP_VERSION_CHECK=1 PI_TELEMETRY=0 pi --no-extensions -e <repo-root> --no-session -p "/analyseme"
-```
+The [public-surface contract test (repository)](https://github.com/senad-d/analyseme/blob/main/test/public-surface-contract.test.mjs), included in default validation, imports the extension entry from the manifest and records registrations through a fake Pi API. It checks `/analyseme`, the lifecycle hooks, and all six tool registrations, including the scanner. It also checks expected schema fields and prompt guidance. The smoke script checks real Pi loading and command output, not the complete registry; neither check proves live connectivity.
 
-Expected result:
+## Targeted checks
 
-- Pi loads the local AnalyseMe extension without other configured extensions.
-- `/analyseme help` returns setup text and the five public tool names.
-- `/analyseme` returns masked read-only configuration/status output.
-- Placeholder Sonar values are used; no live Sonar credentials or network access are required.
-- The placeholder token is not printed.
+For a manual interactive check, use the [isolated development start (repository)](https://github.com/senad-d/analyseme/blob/main/CONTRIBUTING.md#prepare-a-checkout). Enter `/analyseme`, navigate the sections and close the panel, then enter `/analyseme help`. Check that status is read-only, reports token presence without exposing its value, and that help shows setup guidance. Unlike print mode, interactive Pi opens a navigable panel.
 
-Pi does not currently expose a stable non-interactive CLI command for machine-readable tool registry discovery in this validation path. `test/public-surface-contract.test.mjs` loads `package.json` `pi.extensions`, imports the real exported extension factory, and uses a narrow fake `ExtensionAPI` to assert `/analyseme`, lifecycle hooks, and all five `analyseme_*` tool registrations with schemas and prompt guidance. The remaining follow-up is to replace or supplement this harness with a real Pi CLI/RPC registry inspection once Pi exposes one for smoke tests; `npm run smoke:pi` continues to verify the isolated Pi load path and command behavior.
+The [TUI tests (repository)](https://github.com/senad-d/analyseme/blob/main/test/config-tui.test.mjs) check wide, narrow, and tiny rendering, line widths, selection, theme roles, and Pi keybindings. The panel adapts the [generic TUI standard (repository)](https://github.com/senad-d/analyseme/blob/main/specs/spec-configuration-tui-design-standard.md) for read-only status: it omits editing, search, Tab pane switching, and save/cancel flows. Its footer describes sections, and its section headers count items rather than tracking an editable position.
 
-## Configuration TUI conformance
-
-`test/config-tui.test.mjs` covers wide, narrow, and tiny rendering, line-width safety, selected-row markers, semantic theme roles, and injected Pi keybinding navigation/close behavior. The `/analyseme` panel intentionally adapts the generic editable configuration TUI standard for a read-only status panel:
-
-- it omits edit, search, Tab pane switching, and save/cancel flows;
-- it keeps `↑↓ section  q quit` help text because keyboard input only changes the selected section or closes the panel;
-- it uses category descriptions in the footer rather than editable-setting descriptions;
-- it keeps header counters as item counts (`2 items`) instead of editable position counters (`1/2`).
-
-These deviations are deliberate because `/analyseme` never writes configuration, repository files, Sonar state, or `.env`.
-
-## Sonar API compatibility fixture matrix
-
-The offline fixture matrix lives under `test/fixtures/sonar-api/` and is exercised by `test/sonar-compatibility-fixtures.test.mjs`.
-
-- `sonarqube-10.6-core.json`: quality gate, measures, issue search/detail, rule `descriptionSections`, issue snippets, hotspot search/detail, source context, flows, secondary locations, and pagination.
-- `sonarqube-9.9-fallbacks.json`: rule `htmlDesc`, `/api/sources/show` fallback, `textRange.startLine`, and colon-containing project keys.
-- `sonarcloud-current-hotspots.json`: SonarCloud-style hotspot search/detail with top-level security guidance, source arrays, author/assignee metadata, flows, secondary locations, and pagination.
-
-Known unsupported or unverified variants: live server compatibility across every SonarQube/SonarCloud release, private plugin-specific fields, deprecated mutation endpoints, and payloads that omit required issue or hotspot keys.
-
-For an interactive smoke check, run:
-
-```bash
-PI_SKIP_VERSION_CHECK=1 PI_TELEMETRY=0 pi --no-extensions -e .
-```
-
-Then try:
-
-```text
-/analyseme
-/analyseme help
-```
-
-Expected result:
-
-- `/analyseme` shows read-only masked configuration/status output.
-- `/analyseme help` shows setup guidance.
-- No token value is printed.
+For API response coverage, see the [synthetic Sonar fixture matrix (repository)](https://github.com/senad-d/analyseme/blob/main/test/fixtures/sonar-api/README.md). Its SonarQube and SonarCloud payloads cover response shapes, not compatibility with every live server or release. For specialized repository checks, see the [check registry](testing.md).
 
 ## Optional live Sonar smoke test
 
-Only run this manually when you intentionally want to test a real SonarQube/SonarCloud instance.
+Only run this manually against a SonarQube or SonarCloud project you are authorized to inspect. [Configure the endpoint, token, and project locally](SETUP.md#configure-locally) and use the [isolated development start (repository)](https://github.com/senad-d/analyseme/blob/main/CONTRIBUTING.md#prepare-a-checkout). Check `/analyseme` before making requests; masked status shows configuration, not authentication success.
 
-Set placeholders locally without printing secret values:
-
-```bash
-export SONARQUBE_URL="https://sonarcloud.io"
-export SONARQUBE_TOKEN="replace-with-token"
-export SONARQUBE_ORGANIZATION="your-organization"
-export SONARQUBE_PROJECT_KEY="your-project-key"
-```
-
-Then start Pi in isolation:
-
-```bash
-PI_SKIP_VERSION_CHECK=1 PI_TELEMETRY=0 pi --no-extensions -e .
-```
-
-Ask the agent to use AnalyseMe tools, for example:
+In Pi, ask the agent for a summary and a bounded list:
 
 ```text
 Use analyseme_get_project_summary for the configured project.
 Use analyseme_list_issues with limit 5 for the configured project.
-Use analyseme_list_security_hotspots with limit 5 for the configured project.
 ```
 
-Safety expectations:
-
-- Tools only send GET requests to the configured Sonar URL.
-- Tools never mutate issues, hotspot status, assignments, comments, or project settings.
-- The raw `SONARQUBE_TOKEN` never appears in command output, tool output, details, logs, or screenshots.
-- Large responses include truncation notices and metadata.
+Successful results show that these reads work for the configured server, credentials, and project. This is a GET-only check: do not request a scan or upload. Keep tokens out of prompts and logs, and do not share private findings or screenshots. See the [security policy](../SECURITY.md) before sharing evidence.
