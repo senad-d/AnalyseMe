@@ -1,5 +1,7 @@
 # Plan: AnalyseMe Architecture
 
+**Historical proposal.** The plan below predates the current implementation. See [Current application architecture](../docs/STRUCTURE.md) for how AnalyseMe works today.
+
 ## Task Description
 Prepare the architecture blueprint for AnalyseMe, a TypeScript Pi extension that will give agents read-only access to SonarQube and SonarCloud analysis data through custom tools and a read-only configuration command.
 
