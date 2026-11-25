@@ -1,6 +1,4 @@
-# Security Policy
-
-AnalyseMe is a Pi extension for SonarQube/SonarCloud analysis retrieval. Its read tools are strictly read-only; the optional `analyseme_run_scan` tool runs the local `sonar-scanner` CLI and submits a new analysis to the configured Sonar server.
+# Security policy
 
 ## Supported versions
 
@@ -8,61 +6,23 @@ Security fixes target the latest published version once the package is released.
 
 ## Security model
 
-AnalyseMe read behavior is intentionally read-only:
+The `/analyseme` command shows help or read-only configuration status. The five retrieval tools read existing SonarQube or SonarCloud results. They do not change issue or hotspot state, assignments, comments, or project settings.
 
-- It reads configuration from environment variables and optionally local `.env`.
-- It sends read-only HTTP requests to the configured SonarQube/SonarCloud endpoint.
-- It returns project summary, active issue lists, issue locations, source snippets where available, security hotspot details, and Sonar rule/hotspot metadata to the Pi agent.
-- It does not mutate Sonar issues, hotspot status, assignments, comments, project settings, or repositories.
-- It does not send telemetry.
+The optional `analyseme_run_scan` tool is the exception: when invoked, it runs a local SonarScanner CLI in the project directory to submit a new analysis to the configured Sonar server. This submission is not an issue or hotspot editing API. Only request a scan for code you are allowed to analyze and send to that server. Trust the Pi extension and the scanner executable you choose: the scanner runs with your local permissions and can access project files and its process environment. See the [scan boundary decision (repository)](https://github.com/senad-d/analyseme/blob/main/docs/adr/0001-sonar-scan-boundary.md) for the rationale.
 
-The only write path is `analyseme_run_scan`:
+## Credentials and local files
 
-- It runs the local `sonar-scanner` CLI (from `PATH` or `SONARQUBE_SCANNER_PATH`) in the project directory and uploads the analysis report to the configured Sonar URL.
-- The Sonar URL and token are passed to the scanner only through its environment (`SONAR_HOST_URL`, `SONAR_TOKEN`), never as command-line arguments.
-- Connection and credential scanner properties (`sonar.host.url`, `sonar.token`, `sonar.login`, `sonar.password`) are rejected from tool input, so a scan cannot be redirected to another server.
-- It still never mutates Sonar issues, hotspot status, assignments, comments, project settings, or repository files.
+- The extension reads environment configuration and, when enabled, a local `.env`. It can read `sonar.projectKey` from `sonar-project.properties` and inspect `.git/config` for diagnostics and suggestions, not as an automatic source of the project key. It does not write those files. Keep local `.env` files out of version control.
+- `/analyseme` masks token presence. Keep `SONARQUBE_TOKEN` out of prompts, tool arguments, docs, logs, and screenshots. See [setup](docs/SETUP.md#configure-locally) for configuring credentials.
+- The extension passes the configured URL and token to the scanner in `SONAR_HOST_URL` and `SONAR_TOKEN`, not as command-line arguments. Tool input rejects scanner properties `sonar.host.url`, `sonar.token`, `sonar.login`, and `sonar.password`. Do not put other secrets in scanner properties or assume environment variables are hidden from the scanner.
+- The scanner can create work files in the project directory. The extension looks for `.scannerwork/report-task.txt` there to report analysis task details. Do not assume running a scan leaves the working tree unchanged.
 
-## Credentials
+## Network and data handling
 
-Configuration variables:
+The retrieval client builds requests against the configured Sonar URL and uses Node `fetch` with GET and abort support, not shell commands. The configured URL must use HTTPS by default; opt in to HTTP only for a local or trusted development endpoint, because HTTP does not protect the token in transit. The extension does not send telemetry. The scanner is a separate process that performs the analysis upload.
 
-- `SONARQUBE_URL` — SonarQube/SonarCloud endpoint.
-- `SONARQUBE_TOKEN` — API token.
-- `SONARQUBE_ORGANIZATION` — optional SonarCloud organization.
-- `SONARQUBE_PROJECT_KEY` — optional default project key; tools may also resolve `sonar.projectKey` from `sonar-project.properties`.
-- `SONARQUBE_BRANCH` — optional branch analysis scope.
-- `SONARQUBE_PULL_REQUEST` — optional pull request analysis scope; mutually exclusive with branch.
-- `SONARQUBE_ALLOW_INSECURE_HTTP` — optional explicit opt-in for local/trusted-development `http://` Sonar URLs only.
-- `SONARQUBE_SCANNER_PATH` — optional path to the `sonar-scanner` CLI binary used by `analyseme_run_scan`.
-
-AnalyseMe must never print, log, persist, or return the raw token in tool content, tool details, TUI output, errors, tests, or documentation examples. `/analyseme` shows token presence only in masked form.
-
-## Local files
-
-`.env` is for local convenience only and is ignored by git. AnalyseMe reads `.env`, `sonar-project.properties`, and GitHub Actions context variables when needed, but it does not write `.env` or other configuration files. `.git/config` may be inspected only for diagnostics/suggestions and is not used as an automatic Sonar project key.
-
-## Network access
-
-Network access is limited to the configured SonarQube/SonarCloud URL. AnalyseMe rejects non-TLS `http://` Sonar URLs by default; `SONARQUBE_ALLOW_INSECURE_HTTP=true` is required to send tokens over HTTP for local/trusted development endpoints, and `/analyseme` surfaces that warning without printing token values. AnalyseMe uses Node `fetch` with abort support and does not shell out to `curl` or other commands for API calls. `analyseme_run_scan` is the one exception that spawns a local process: the `sonar-scanner` CLI, which itself uploads the analysis to the configured Sonar URL.
-
-Default tests use mocked `fetch`; live Sonar credentials are not required for validation.
-
-## Data handling
-
-Sonar issue messages, hotspot messages, file paths, source snippets, and rule metadata may contain project-sensitive information. AnalyseMe strips terminal control sequences from Sonar-derived strings and bounds large fields before returning content or structured details. It returns retrieved Sonar data only through normal Pi command/tool output and does not persist it outside normal Pi session/tool result storage.
+Sonar messages, file paths, source snippets, rule and hotspot guidance, and scanner logs may contain sensitive project information. AnalyseMe strips terminal control sequences, bounds large text fields, and redacts the configured token from scanner log output. These safeguards do not make results public-safe: tool output and details are visible to the Pi agent and may be retained in Pi session history. Review them before sharing.
 
 ## Reporting a vulnerability
 
-Open a private security advisory or contact the maintainer through the repository security process. Do not include real Sonar tokens, private source code, or sensitive scan data in public issues.
-
-## For implementers
-
-Before changing runtime behavior, read:
-
-- `docs/PROJECT_DEFINITION_BRIEF.md`
-- `specs/spec-architecture.md`
-- `specs/spec-guidelines.md`
-- `specs/spec-tasks.md`
-
-Do not weaken the read-only boundary of the read tools without an explicit design decision; `analyseme_run_scan` is the only sanctioned write path and must stay limited to submitting analyses.
+Open a private security advisory or contact the maintainer through the repository security process. Do not post real Sonar tokens, private source code, or sensitive scan data in public issues. Use sanitized examples when describing the problem.

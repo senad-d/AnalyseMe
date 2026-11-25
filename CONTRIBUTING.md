@@ -1,65 +1,44 @@
 # Contributing to AnalyseMe
 
-AnalyseMe is a TypeScript Pi extension project for read-only SonarQube/SonarCloud analysis retrieval.
+## Prepare a checkout
 
-## Current status
+You need Node.js 22.19.0 or newer and npm. Use Pi for interactive development or the separate Pi smoke test. You do not need a Sonar account, token, or scanner for the default validation suite.
 
-The repository contains implemented read-only AnalyseMe runtime surfaces:
-
-- `/analyseme` read-only configuration/status TUI and `/analyseme help`
-- `analyseme_get_project_summary`
-- `analyseme_list_issues`
-- `analyseme_get_issue`
-- `analyseme_list_security_hotspots`
-- `analyseme_get_security_hotspot`
-- lightweight `session_start`/`session_shutdown` status hooks
-
-For design context and future work, start with:
-
-- `docs/PROJECT_DEFINITION_BRIEF.md`
-- `specs/spec-architecture.md`
-- `specs/spec-guidelines.md`
-- `specs/spec-tasks.md`
-- `specs/spec-configuration-tui-design-standard.md`
-
-Implement future work one checkbox at a time from current task specs in a separate implementation session.
-
-## Requirements
-
-- Node.js `>=22.19.0`
-- npm
-- Pi for smoke testing
-
-## Development workflow
+From a source checkout, install the locked dependencies, then start Pi with only the local extension explicitly loaded:
 
 ```bash
-npm install
-npm run validate
+npm ci
+npm run dev
 ```
 
-Useful commands:
+`npm run dev` runs `pi --no-extensions -e .` from the checkout without changing your installed extensions. In Pi, use `/analyseme help` for setup guidance and `/analyseme` for masked configuration status. These commands do not contact Sonar.
+
+## Make and submit a change
+
+1. Start with the [product brief](docs/PROJECT_DEFINITION_BRIEF.md) and the [engineering guidelines](specs/spec-guidelines.md). Use the [source map](docs/STRUCTURE.md) to find the module and its tests. For changes involving local files, credentials, or uploads, read the [security policy](SECURITY.md).
+2. Keep the change focused. If you are following a task checklist, work on one task at a time and mark it complete only after its acceptance criteria are met. See [AGENTS.md](AGENTS.md) and the [Mission guide](docs/MISSION.md) for repository conventions and records.
+3. Run [default validation](docs/VALIDATION.md#default-validation) from the root. For changes to Pi loading or command behavior, also run the [isolated Pi smoke test](docs/VALIDATION.md#isolated-pi-smoke-test). [Live read checks](docs/VALIDATION.md#optional-live-sonar-smoke-test) are optional and separate from both.
+4. Use the [issue forms](.github/ISSUE_TEMPLATE/) for public bug reports, feature requests, or documentation issues. For a pull request, use the [PR template](.github/PULL_REQUEST_TEMPLATE.md) and record the checks you actually ran. Report sensitive issues through the [private reporting route](SECURITY.md#reporting-a-vulnerability).
+
+### Pull request checklist
+
+- Explain the change and link the relevant issue, if any.
+- Update the affected docs and examples, and cover behavior changes with relevant tests.
+- Record the validation results and any manual checks; note checks you did not run rather than marking them complete.
+- Review file, process, network, and credential impacts. Keep secrets, `.env`, local `.pi/` state, dependencies, generated reports, coverage, and package tarballs out of the PR.
+
+## Publishing
+
+**Maintainers only.** A package [dry-run](docs/VALIDATION.md#package-contents-check) checks the file list without publishing. The manual release below publishes `@senad-d/analyseme` to npm; it is not a validation step.
+
+Update and commit [CHANGELOG.md](CHANGELOG.md) before starting. Use a clean working tree with dependencies installed, a Node.js installation with npm, Git, and an npm account authorized to publish the package. Choose a new version that is not already published or tagged. Use a branch rather than a detached checkout if you intend to push through the script.
 
 ```bash
-npm run typecheck
-npm run lint
-npm run test
-npm run check:pack
-pi --no-extensions -e .
+npm login
+npm whoami
+node scripts/publish-npm.mjs
 ```
 
-## Pull request checklist
+The [release script](scripts/publish-npm.mjs) prompts for the version and confirmation. Once confirmed, it runs validation, updates the manifest and lockfile, creates the release commit and `v<version>` tag, and publishes the package publicly. After publishing, it separately asks whether to push the branch and tag to `origin`.
 
-- Keep changes focused.
-- Update README/docs when behavior changes.
-- Add tests for implemented behavior.
-- Do not commit secrets, `.env`, `.pi/`, `node_modules/`, generated reports, coverage, or package tarballs.
-- Do not mark task checkboxes complete unless the task is actually implemented and validated.
-- Keep Sonar API behavior read-only unless an explicit approved design decision changes that boundary.
-
-## Security expectations
-
-- Never print or log `SONARQUBE_TOKEN`.
-- Keep the implemented `/analyseme` TUI read-only.
-- Do not write `.env` from runtime code.
-- Do not call Sonar mutation APIs.
-- Do not use shell commands for Sonar HTTP requests.
+The manually dispatched [GitHub Actions publish workflow](.github/workflows/publish.yml) is a separate release path: it runs on the default branch, reads the version from the checked-in manifest, and uses npm trusted publishing. Do not run both paths for the same version.
