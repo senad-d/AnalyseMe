@@ -77,7 +77,7 @@ A returned tool result has human-readable text in `content` and operation-specif
 | Not found | A keyed read raises an error when the response does not contain the requested key, including when it returns a different key. |
 | Configuration, permissions or service error | Invalid connection settings, an unreadable local settings file when needed, a missing required project or key, or a failure of a required request raise errors. Authentication or permission failures and other HTTP errors are distinct from network failures, request timeouts or invalid JSON. A failed required request for the summary does not return a partial summary. |
 | Cancellation | Cancellation propagates instead of becoming a missing-data warning, even during optional detail requests. Cancelling a scan stops the local process and raises an abort rather than returning a completed scan result. |
-| Truncation notice | `details.truncation` describes the line and byte limits applied to the rendered `content`; it does not remove rows from the structured result. Individual mapped fields can be shortened separately, with field notices and a count in `details.textSafety`. For scans, `details.log.truncated` refers to the scanner log tail, not the rendered result. |
+| Truncation notice | `details.truncation` reports whether the rendered text was shortened and how many lines and bytes were kept out of the original totals. Shortening the display does not remove rows from the structured result. Individual mapped fields can be shortened separately, with field notices and a count in `details.textSafety`. For scans, `details.log.truncated` refers to the scanner log tail, not the rendered result. |
 
 ## Terms
 
