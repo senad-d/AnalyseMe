@@ -1,114 +1,26 @@
 # Project Definition Brief
 
-## 1. Bootstrap
-- Template source: `/Users/senad/Documents/Code/Moj_git/pi-tmp`
-- Target directory: `/Users/senad/Documents/Code/Moj_git/analyseme`
-- Copy status: copied template into current directory; preserved existing `.pi/agent/guardme-settings.json`
+## Product and readers
 
-## 2. Project identity
-- Package name: `@senad-d/analyseme`
-- Display name: `AnalyseMe`
-- Exported extension function: `analyseMeExtension`
-- Repository URL: `https://github.com/senad-d/analyseme`
-- One-sentence pitch: AnalyseMe gives Pi agents read-only SonarQube/SonarCloud analysis tools so they can inspect project health, active issues, issue locations, and rule-provided fix guidance.
+AnalyseMe (`@senad-d/analyseme`) is a Pi extension for developers and coding agents working in a local checkout or CI. It lets them inspect an existing SonarQube/SonarCloud analysis, find an active issue or a security hotspot to review, and look up the location and guidance Sonar provides. When existing results are not current enough, the user can ask the agent to submit a new analysis using a locally installed SonarScanner.
 
-## 3. Users and use cases
-- Primary users: developers and coding agents working from local repositories or CI/GitHub Actions.
-- Primary use cases:
-  - Check SonarQube/SonarCloud project summary.
-  - List all active, unresolved issues for a project.
-  - Fetch one specific issue with "Where is the issue?" style location details.
-  - List and inspect security hotspots that require review.
-  - Fetch fix/security guidance only from Sonar rule/hotspot metadata APIs.
-  - Verify local/CI configuration without exposing secrets.
-- Non-goals:
-  - No issue mutations, assignments, transitions, false-positive marking, comments, or writes to Sonar.
-  - No code fixing in this extension; agents use the returned data with normal Pi tools.
-  - No telemetry.
+AnalyseMe does not fix code, edit configuration, install the scanner, or provide Sonar workflow actions such as assigning findings, changing issue or hotspot status, commenting, or updating project settings. Issue remediation and hotspot review guidance come from Sonar, not from AnalyseMe. The [project glossary](https://github.com/senad-d/analyseme/blob/main/CONTEXT.md) defines the finding and scope terminology.
 
-## 4. Pi integration surface
+## Observable behavior
 
-| Surface | Name | Purpose | Notes |
-| --- | --- | --- | --- |
-| Command | `/analyseme` | Open read-only config/status TUI | Must follow `specs/spec-configuration-tui-design-standard.md` |
-| Command | `/analyseme help` | Show setup/tool usage tips | Text help only |
-| Tool | `analyseme_get_project_summary` | Fetch project quality/metric summary | `projectKey` optional; supports optional branch/PR scope |
-| Tool | `analyseme_list_issues` | List active unresolved issues | `projectKey` optional; excludes ignored/false-positive/accepted-like statuses; supports optional branch/PR scope |
-| Tool | `analyseme_get_issue` | Fetch detailed issue/rule/location info | Include rule metadata fix guidance from Sonar APIs only; supports optional branch/PR scope where needed |
-| Tool | `analyseme_list_security_hotspots` | List security hotspots | Security hotspots are separate from issues and use read-only hotspot APIs |
-| Tool | `analyseme_get_security_hotspot` | Fetch security hotspot details | Include Sonar-provided hotspot/security guidance only |
-| Event | `session_start/session_shutdown` | Clear any stale AnalyseMe UI status | No persistent bottom status text |
-| UI | Read-only config TUI | Show masked config, CI/local setup tips, status | No `.env` writes |
-| Resource | none | No skills/prompts/themes planned | Specs/docs only |
+The [package manifest](https://github.com/senad-d/analyseme/blob/main/package.json) loads the `analyseMeExtension` entry point. The [registration contract test](https://github.com/senad-d/analyseme/blob/main/test/public-surface-contract.test.mjs) checks one command and six tools with schemas and prompt guidance. See the [tool reference](TOOLS.md) for inputs and result fields.
 
-## 5. Architecture
-- Runtime files:
-  - `src/extension.ts` — small entry point only.
-  - `src/constants.ts` — names, status key, command/tool names, and env var names.
-  - `src/config/` — read env, local `.env`, `sonar-project.properties`, and branch/PR scope.
-  - `src/sonar/` — Sonar API client and response shaping.
-  - `src/tools/` — one file per AnalyseMe tool plus shared tool helpers.
-  - `src/commands/` — `/analyseme` command and help.
-  - `src/ui/` — read-only config TUI design helpers.
-  - `src/utils/` — truncation, masking, formatting helpers.
-- Module boundaries:
-  - Config loading separate from Sonar API calls.
-  - Tools call service/client modules, not raw fetch directly.
-  - TUI is config/status only, not a feature implementation shortcut.
-- Dependencies:
-  - Pi packages remain peer dependencies with `"*"`.
-  - Runtime `.env` support can use a small dependency or a tested local parser in the implementation session.
-  - Use Node fetch for HTTP.
+| Requirement | Observable result | Check in the repository |
+| --- | --- | --- |
+| Check setup without contacting Sonar | `/analyseme` shows read-only configuration status with token presence only. Interactive Pi opens a status panel; non-interactive modes render text. `/analyseme help` gives usage text without requiring credentials. A ready status reflects local setup, not server reachability or permissions. | [Command tests](https://github.com/senad-d/analyseme/blob/main/test/analyseme-command.test.mjs), [TUI tests](https://github.com/senad-d/analyseme/blob/main/test/config-tui.test.mjs) |
+| Check project health | `analyseme_get_project_summary` returns the quality gate and available measures for the resolved project and scope. | [Summary tests](https://github.com/senad-d/analyseme/blob/main/test/project-summary-tool.test.mjs) |
+| Find active issues | `analyseme_list_issues` returns a bounded page with pagination metadata, excluding non-actionable results such as accepted, false-positive, or resolved issues. `analyseme_get_issue` retrieves a specific issue by key with locations, source context, and Sonar rule guidance where available. | [Issue list tests](https://github.com/senad-d/analyseme/blob/main/test/list-issues-tool.test.mjs), [issue detail tests](https://github.com/senad-d/analyseme/blob/main/test/get-issue-tool.test.mjs) |
+| Review security hotspots separately | `analyseme_list_security_hotspots` returns a bounded page of hotspots requiring review. `analyseme_get_security_hotspot` retrieves a specific hotspot by key with locations, source context, and Sonar security guidance where available. Neither tool marks a hotspot as reviewed. | [Hotspot list tests](https://github.com/senad-d/analyseme/blob/main/test/list-security-hotspots-tool.test.mjs), [hotspot detail tests](https://github.com/senad-d/analyseme/blob/main/test/get-security-hotspot-tool.test.mjs) |
+| Request a fresh analysis | An explicit `analyseme_run_scan` call runs the local scanner in the current project and submits analysis to the configured server. It requires a resolved project key, a scanner on `PATH` or configured in `SONARQUBE_SCANNER_PATH`, and credentials authorized to submit analysis. Read fresh findings after server processing; the call can optionally ask the scanner to wait for the quality gate. Scanner exit and upload confirmation are separate: a zero exit without a readable scanner report does not confirm the upload. | [Scan tests](https://github.com/senad-d/analyseme/blob/main/test/run-scan-tool.test.mjs) |
 
-## 6. Config, state, and persistence
-- Config source:
-  - Environment variables.
-  - Local `.env` for local use.
-  - Required: `SONARQUBE_URL`, `SONARQUBE_TOKEN`.
-  - Optional: `SONARQUBE_ORGANIZATION` for SonarCloud.
-  - Optional: `SONARQUBE_PROJECT_KEY` as an explicit default project key for CI or repositories without `sonar-project.properties`.
-  - Optional branch/PR scope: `SONARQUBE_BRANCH` or `SONARQUBE_PULL_REQUEST`; never both.
-- Session state: none required beyond normal tool result details.
-- Files written: none by runtime tools/commands.
-- Cleanup behavior: clear AnalyseMe status on `session_shutdown`.
+## Constraints and evidence
 
-## 7. Security and privacy
-- Shell execution: none for Sonar HTTP requests.
-- File access/mutation: read `.env` only if present; no file writes.
-- Network access: read-only HTTP requests to configured SonarQube/SonarCloud endpoint.
-- Credentials/secrets: token never returned in tool output; TUI masks token presence/value.
-- Telemetry/retention: none.
-- User confirmations: not needed for read-only tools; TUI explicitly says no writes.
-
-## 8. Documentation and packaging
-- README documents AnalyseMe setup, local `.env`, GitHub Actions examples, implemented commands/tools, troubleshooting, and validation.
-- SECURITY documents Sonar token handling, network behavior, no telemetry, no Sonar writes, and safe text handling.
-- CHANGELOG records prepared-project history and implemented runtime behavior.
-- package.json changes:
-  - Rename to `@senad-d/analyseme`.
-  - Update description/repository/bugs/homepage/keywords.
-  - Keep `pi.extensions: ["./src/extension.ts"]`.
-  - Keep runtime dependencies minimal; config loading currently uses tested local parsing.
-- npm/git distribution plan: npm package and GitHub repo at `senad-d/analyseme`.
-
-## 9. Validation plan
-- Typecheck: `npm run typecheck`
-- Tests: metadata/spec presence, config, command/TUI, Sonar mapping/client, and tool behavior tests.
-- Package dry-run: `npm run check:pack`
-- Full validation after prep: `npm install`, then `npm run validate`
-- Isolated Pi smoke test: `pi --no-extensions -e .`
-
-## 10. Open questions and assumptions
-- Questions:
-  - None blocking.
-- Assumptions:
-  - `projectKey` is optional in tools and resolved in this order: explicit tool argument, `SONARQUBE_PROJECT_KEY`, `sonar-project.properties` `sonar.projectKey`. `.git/config` remote names may be shown as diagnostics only and must not be used as an automatic Sonar key.
-  - Branch/PR scope is optional and resolved in this order: explicit tool argument, env/`.env`, then GitHub Actions context (`GITHUB_HEAD_REF`, `GITHUB_REF_NAME`, `GITHUB_REF`, `GITHUB_EVENT_PATH`). `branch` and `pullRequest` are mutually exclusive.
-  - `SONARQUBE_ORGANIZATION` is optional and used when SonarCloud requires it.
-  - `/analyseme` TUI is read-only and never writes `.env`.
-  - The TUI design must follow `specs/spec-configuration-tui-design-standard.md`.
-- Decisions:
-  - Tools are read-only.
-  - Fix guidance comes only from Sonar rule metadata/API.
-  - Active issues exclude ignored, false positive, accepted/resolved-like results.
-  - Security hotspots are separate from issues and use dedicated read-only tools.
+- **Configuration resolution.** Tools require a Sonar URL and token. Environment values take precedence over local `.env` values. A project key comes from the tool argument, configured `SONARQUBE_PROJECT_KEY`, then `sonar-project.properties`. Git remote names are diagnostics, not a fallback key. The by-key detail tools can operate without a resolved project key. Optional branch or pull request scope is mutually exclusive; it comes from tool arguments, configured values, then GitHub Actions context. See the [configuration tests](https://github.com/senad-d/analyseme/blob/main/test/config.test.mjs).
+- **Read versus submit.** The five retrieval tools use GET requests; neither status/help nor retrieval starts a scan. Only the scan tool launches the scanner. The scanner may create work files such as `.scannerwork/`; cancelling or timing out a local run is not a guarantee that the server received nothing. Trust the Pi extension and local scanner with their local permissions and review the destination before submitting. See the [as-built architecture](https://github.com/senad-d/analyseme/blob/main/specs/spec-architecture.md).
+- **Sensitive data.** HTTPS is required by default; non-TLS HTTP requires an explicit opt-in for local or trusted development endpoints. Keep tokens out of user-visible output. Bounded and sanitized output can still contain project-sensitive paths, snippets, or guidance. A missing optional source or guidance response is not a reason to invent it. AnalyseMe does not send telemetry. See the [security policy](../SECURITY.md) and [read error tests](https://github.com/senad-d/analyseme/blob/main/test/tool-error-contract.test.mjs).
+- **What verification proves.** The [validation guide](VALIDATION.md) describes offline checks for registration, command output, fixture-based retrieval, and scanner behavior. These do not certify live server compatibility, token permissions, or successful uploads to a real Sonar server. The [engineering guidelines](https://github.com/senad-d/analyseme/blob/main/specs/spec-guidelines.md) explain which parts of the generic TUI standard apply to the read-only panel.
